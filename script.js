@@ -23,6 +23,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
   year: "numeric",
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
+const CLOUD_SYNC_INTERVAL_MS = 8000;
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -64,6 +65,9 @@ let scanLoopBusy = false;
 let lastScannedCode = "";
 let lastScannedAt = 0;
 let recoveryCandidate = null;
+let cloudSyncPollId = 0;
+let cloudSyncInFlight = false;
+let lastCloudSyncMarker = "";
 
 const elements = {
   authShell: document.querySelector("#auth-shell"),
@@ -263,6 +267,15 @@ if (cloudMode) {
   supabaseClient.auth.onAuthStateChange(() => {
     void syncInterface();
   });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void refreshCloudAccountState({ force: true });
+    }
+  });
+  window.addEventListener("focus", () => {
+    void refreshCloudAccountState({ force: true });
+  });
+  startCloudSyncWatcher();
 }
 void syncInterface();
 
@@ -498,6 +511,7 @@ async function syncCloudInterface() {
     currentAccount = null;
     currentAdmin = null;
     adminRecord = null;
+    lastCloudSyncMarker = "";
     accounts = [];
     remoteStoreMap = {};
     state = buildEmptyState();
@@ -518,6 +532,7 @@ async function syncCloudInterfaceForUser(user) {
     currentAccount = null;
     currentAdmin = null;
     adminRecord = null;
+    lastCloudSyncMarker = "";
     accounts = [];
     remoteStoreMap = {};
     state = buildEmptyState();
@@ -537,6 +552,7 @@ async function syncCloudInterfaceForUser(user) {
     currentAccount = null;
     currentAdmin = buildCloudAdmin(profile);
     adminRecord = currentAdmin;
+    lastCloudSyncMarker = "";
     state = buildEmptyState();
     resetAuthForms();
     await loadCloudAdminWorkspace();
@@ -548,6 +564,7 @@ async function syncCloudInterfaceForUser(user) {
   currentAdmin = null;
   adminRecord = null;
   currentAccount = buildCloudAccount(profile);
+  lastCloudSyncMarker = getCloudSyncMarker(profile);
   accounts = [];
   remoteStoreMap = {};
   state = await loadCloudStateForUser(currentAccount.id, currentAccount.storeName);
@@ -631,6 +648,63 @@ async function ensureCloudProfile(user) {
   }
 
   return data;
+}
+
+function getCloudSyncMarker(profile) {
+  return normalizeDate(profile?.updated_at || profile?.last_login_at || profile?.created_at);
+}
+
+function startCloudSyncWatcher() {
+  if (cloudSyncPollId || !cloudMode) {
+    return;
+  }
+
+  cloudSyncPollId = window.setInterval(() => {
+    void refreshCloudAccountState();
+  }, CLOUD_SYNC_INTERVAL_MS);
+}
+
+async function refreshCloudAccountState(options = {}) {
+  if (!cloudMode || !currentAccount || currentAdmin || session?.role !== "store") {
+    return false;
+  }
+
+  if (!options.force && document.visibilityState !== "visible") {
+    return false;
+  }
+
+  if (cloudSyncInFlight) {
+    return false;
+  }
+
+  cloudSyncInFlight = true;
+
+  try {
+    const profile = await loadCloudProfile(currentAccount.id);
+    if (!profile) {
+      return false;
+    }
+
+    const nextMarker = getCloudSyncMarker(profile);
+    if (!options.force && nextMarker === lastCloudSyncMarker) {
+      return false;
+    }
+
+    const latestState = await loadCloudStateForUser(currentAccount.id, profile.store_name);
+    if (!latestState) {
+      return false;
+    }
+
+    lastCloudSyncMarker = nextMarker;
+    currentAccount = buildCloudAccount(profile);
+    state = normalizeState(latestState);
+    remoteStoreMap[currentAccount.id] = state;
+    renderVisibility();
+    renderAll();
+    return true;
+  } finally {
+    cloudSyncInFlight = false;
+  }
 }
 
 async function loadCloudStateForUser(userId, storeName) {
@@ -2451,6 +2525,25 @@ async function persistCloudState(userId, storeState) {
     return false;
   }
 
+  await updateCloudSyncMarker(userId);
+  return true;
+}
+
+async function updateCloudSyncMarker(userId) {
+  const syncStamp = new Date().toISOString();
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .update({ updated_at: syncStamp })
+    .eq("user_id", userId)
+    .select("updated_at, last_login_at, created_at")
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Unable to update the shared sync marker.", error);
+    return false;
+  }
+
+  lastCloudSyncMarker = getCloudSyncMarker(data || { updated_at: syncStamp });
   return true;
 }
 
