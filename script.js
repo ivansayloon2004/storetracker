@@ -133,6 +133,8 @@ const elements = {
   scannerStart: document.querySelector("#scanner-start"),
   scannerStop: document.querySelector("#scanner-stop"),
   scannerStatus: document.querySelector("#scanner-status"),
+  scannerAction: document.querySelector("#scanner-action"),
+  scannerQuantity: document.querySelector("#scanner-quantity"),
   scannerManualForm: document.querySelector("#scanner-manual-form"),
   scannerCodeInput: document.querySelector("#scanner-code-input"),
   scannerLastSale: document.querySelector("#scanner-last-sale"),
@@ -315,6 +317,8 @@ function setupEventListeners() {
   elements.scannerStop.addEventListener("click", () => {
     stopCameraScanner();
   });
+  elements.scannerAction.addEventListener("change", updateScannerGuidance);
+  elements.scannerQuantity.addEventListener("input", updateScannerGuidance);
   elements.scannerManualForm.addEventListener("submit", handleScannerManualSubmit);
   elements.saleForm.addEventListener("submit", handleSaleSubmit);
   elements.restockForm.addEventListener("submit", handleRestockSubmit);
@@ -1770,8 +1774,12 @@ function resetAppForms() {
   elements.restockForm.reset();
   elements.debtForm.reset();
   elements.expenseForm.reset();
+  elements.scannerAction.value = "sale";
+  elements.scannerQuantity.value = "1";
+  elements.scannerCodeInput.value = "";
   updateSalePreview();
   updateRestockPreview();
+  updateScannerGuidance();
 }
 
 function renderAll() {
@@ -1796,6 +1804,7 @@ function renderAll() {
   renderRecentActivity();
   updateSalePreview();
   updateRestockPreview();
+  updateScannerGuidance();
 }
 
 function renderAdminDashboard() {
@@ -2735,6 +2744,44 @@ async function recordSale(product, quantity, note, options = {}) {
   return { ok: true, product };
 }
 
+async function recordRestock(product, quantity, note, options = {}) {
+  if (!product) {
+    return { ok: false, message: "Choose a product before recording a restock." };
+  }
+
+  if (quantity <= 0) {
+    return { ok: false, message: "Restock quantity must be greater than zero." };
+  }
+
+  product.stock = roundNumber(product.stock + quantity);
+  product.updatedAt = new Date().toISOString();
+
+  state.transactions.unshift({
+    id: uid("txn"),
+    type: "restock",
+    productId: product.id,
+    productName: product.name,
+    quantity,
+    unit: product.unit,
+    unitPrice: product.price,
+    total: roundMoney(quantity * product.price),
+    note,
+    occurredAt: new Date().toISOString(),
+  });
+
+  addActivity(
+    "restock",
+    options.activityMessage || `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
+    product
+  );
+  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} restock saved.`, "success");
+  if (!saved) {
+    return { ok: false, message: "The restock could not be synchronized to the shared workspace." };
+  }
+
+  return { ok: true, product };
+}
+
 async function handleSaleSubmit(event) {
   event.preventDefault();
 
@@ -2769,24 +2816,13 @@ async function handleRestockSubmit(event) {
     return;
   }
 
-  product.stock = roundNumber(product.stock + quantity);
-  product.updatedAt = new Date().toISOString();
+  const result = await recordRestock(product, quantity, note);
+  if (!result.ok) {
+    setFeedback(result.message, "danger");
+    return;
+  }
 
-  state.transactions.unshift({
-    id: uid("txn"),
-    type: "restock",
-    productId: product.id,
-    productName: product.name,
-    quantity,
-    unit: product.unit,
-    unitPrice: product.price,
-    total: roundMoney(quantity * product.price),
-    note,
-    occurredAt: new Date().toISOString(),
-  });
-
-  addActivity("restock", `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`, product);
-  if (await saveAndRefresh(`${product.name} restock saved.`, "success")) {
+  if (result.ok) {
     elements.restockForm.reset();
     updateRestockPreview();
   }
@@ -3022,11 +3058,28 @@ async function handleScannerManualSubmit(event) {
 
   const code = normalizeCode(elements.scannerCodeInput.value);
   if (!code) {
-    setScannerStatus("Enter or scan a barcode before selling from code.", "warning");
+    setScannerStatus("Enter or scan a barcode before processing the code.", "warning");
     return;
   }
 
   await processScannedCode(code, "manual");
+}
+
+function getScannerSettings() {
+  return {
+    mode: elements.scannerAction.value === "restock" ? "restock" : "sale",
+    quantity: roundNumber(elements.scannerQuantity.value || 1),
+  };
+}
+
+function updateScannerGuidance() {
+  const { mode, quantity } = getScannerSettings();
+  const isRestock = mode === "restock";
+  const quantityLabel = formatQuantity(Math.max(quantity, 0));
+  elements.scannerStatus.textContent = isRestock
+    ? `Every recognized barcode will restock ${quantityLabel} item(s). Save the product barcode first, then scan to add stock automatically.`
+    : `Every recognized barcode will record ${quantityLabel} item(s) sold. Save the product barcode first, then scan to reduce stock automatically.`;
+  delete elements.scannerStatus.dataset.tone;
 }
 
 function setScannerStatus(message, tone = "default") {
@@ -3108,7 +3161,13 @@ async function startCameraScanner() {
     lastScannedCode = "";
     lastScannedAt = 0;
     updateScannerSurface();
-    setScannerStatus("Camera scanner is active. Each recognized code records one sale unit.", "success");
+    const { mode, quantity } = getScannerSettings();
+    setScannerStatus(
+      `Camera scanner is active. Each recognized code will ${mode === "restock" ? "restock" : "sell"} ${formatQuantity(
+        quantity
+      )} item(s).`,
+      "success"
+    );
     queueScanFrame();
   } catch (error) {
     console.error("Unable to start barcode scanner.", error);
@@ -3199,6 +3258,12 @@ async function processScannedCode(rawCode, source) {
     return;
   }
 
+  const { mode, quantity } = getScannerSettings();
+  if (quantity <= 0) {
+    setScannerStatus("Quantity per scan must be greater than zero before scanning.", "warning");
+    return;
+  }
+
   const product = getProductByCode(code);
   if (!product) {
     setScannerStatus(
@@ -3210,25 +3275,42 @@ async function processScannedCode(rawCode, source) {
     return;
   }
 
-  const result = await recordSale(product, 1, `${source === "camera" ? "Camera" : "Manual"} barcode scan: ${code}`, {
-    activityMessage: `Recorded barcode sale for 1 ${product.unit} of ${product.name}.`,
-    feedbackMessage: `${product.name} was sold from barcode scan.`,
-  });
+  const entryLabel = `${source === "camera" ? "Camera" : "Manual"} barcode scan: ${code}`;
+  const result =
+    mode === "restock"
+      ? await recordRestock(product, quantity, entryLabel, {
+          activityMessage: `Recorded barcode restock for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
+          feedbackMessage: `${product.name} was restocked from barcode scan.`,
+        })
+      : await recordSale(product, quantity, entryLabel, {
+          activityMessage: `Recorded barcode sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
+          feedbackMessage: `${product.name} was sold from barcode scan.`,
+        });
 
   if (!result.ok) {
     setScannerStatus(result.message, "danger");
-    elements.scannerLastSale.textContent = `${product.name} was not sold because the stock is too low.`;
+    elements.scannerLastSale.textContent =
+      mode === "restock"
+        ? `${product.name} was not restocked. Review the scanner settings and try again.`
+        : `${product.name} was not sold because the stock is too low.`;
     elements.scannerCodeInput.value = "";
     return;
   }
 
   setScannerStatus(
-    `${product.name} recorded successfully. ${formatQuantity(product.stock)} ${product.unit} remaining.`,
+    mode === "restock"
+      ? `${product.name} restocked successfully. ${formatQuantity(product.stock)} ${product.unit} now on hand.`
+      : `${product.name} recorded successfully. ${formatQuantity(product.stock)} ${product.unit} remaining.`,
     "success"
   );
-  elements.scannerLastSale.textContent = `${product.name} | Code: ${code} | Remaining stock: ${formatQuantity(
-    product.stock
-  )} ${product.unit}`;
+  elements.scannerLastSale.textContent =
+    mode === "restock"
+      ? `${product.name} | Code: ${code} | Added: ${formatQuantity(quantity)} ${product.unit} | New stock: ${formatQuantity(
+          product.stock
+        )} ${product.unit}`
+      : `${product.name} | Code: ${code} | Sold: ${formatQuantity(quantity)} ${product.unit} | Remaining stock: ${formatQuantity(
+          product.stock
+        )} ${product.unit}`;
   elements.scannerCodeInput.value = "";
 }
 

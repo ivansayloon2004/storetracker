@@ -447,8 +447,23 @@
           </div>
 
           <div class="tab-panel" id="ops-scan" data-tab-panel="store-ops" hidden>
-            <h3 class="tab-section-title">Scan to sell</h3>
-            <p class="section-intro">Use your phone camera or a barcode scanner to record one item sold for every recognized product code.</p>
+            <h3 class="tab-section-title">Scan inventory action</h3>
+            <p class="section-intro">Use your phone camera or a barcode scanner to record a sale or restock for every recognized product code.</p>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>Scan mode</span>
+                <select id="scanner-action">
+                  <option value="sale">Sell from barcode</option>
+                  <option value="restock">Restock from barcode</option>
+                </select>
+              </label>
+
+              <label class="field">
+                <span>Quantity per scan</span>
+                <input id="scanner-quantity" type="number" min="0.01" step="0.01" value="1">
+              </label>
+            </div>
 
             <div class="scanner-stage">
               <video class="scanner-video" id="scanner-video" autoplay playsinline muted hidden></video>
@@ -463,7 +478,7 @@
             </div>
 
             <p class="form-preview" id="scanner-status">
-              Save each product's barcode in the Barcode or product code field, then scan to record a sale automatically.
+              Save each product's barcode in the Barcode or product code field, then scan to record the selected inventory action automatically.
             </p>
 
             <form class="scan-manual-form" id="scanner-manual-form">
@@ -478,10 +493,10 @@
                 >
               </label>
 
-              <button class="button ghost" type="submit">Sell From Code</button>
+              <button class="button ghost" type="submit">Process Code</button>
             </form>
 
-            <p class="scanner-last-sale" id="scanner-last-sale">No barcode sale has been recorded yet.</p>
+            <p class="scanner-last-sale" id="scanner-last-sale">No barcode inventory action has been recorded yet.</p>
           </div>
 
           <div class="tab-panel" id="ops-utang" data-tab-panel="store-ops" hidden>
