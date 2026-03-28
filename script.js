@@ -76,6 +76,16 @@ const elements = {
   authTitle: document.querySelector("#auth-title"),
   authSubtitle: document.querySelector("#auth-subtitle"),
   authMessage: document.querySelector("#auth-message"),
+  authModeChip: document.querySelector("#auth-mode-chip"),
+  authGuideTitle: document.querySelector("#auth-guide-title"),
+  authGuideList: document.querySelector("#auth-guide-list"),
+  authFormHeading: document.querySelector("#auth-form-heading"),
+  authFormNote: document.querySelector("#auth-form-note"),
+  authSupportTitle: document.querySelector("#auth-support-title"),
+  authSupportText: document.querySelector("#auth-support-text"),
+  authLoginSignupButton: document.querySelector("#auth-login-signup-button"),
+  authSupportPrimary: document.querySelector("#auth-support-primary"),
+  authSupportSecondary: document.querySelector("#auth-support-secondary"),
   loginForm: document.querySelector("#login-form"),
   loginEmail: document.querySelector("#login-email"),
   loginPassword: document.querySelector("#login-password"),
@@ -318,6 +328,15 @@ function setupEventListeners() {
   elements.signupTab.addEventListener("click", () => setAuthMode("signup"));
   elements.adminTab.addEventListener("click", () => setAuthMode("admin"));
 
+  [elements.authLoginSignupButton, elements.authSupportPrimary, elements.authSupportSecondary].forEach((button) => {
+    button?.addEventListener("click", () => {
+      const mode = button.dataset.authShortcutMode;
+      if (mode) {
+        setAuthMode(mode);
+      }
+    });
+  });
+
   elements.loginForm.addEventListener("submit", (event) => {
     void handleLoginSubmit(event);
   });
@@ -417,6 +436,26 @@ function renderAuthMode() {
       cloudMode
         ? "Register a shared store account so the same inventory can be used on phone and desktop."
         : "Register a browser-based store account so inventory records remain separate for each business on this device.";
+    elements.authModeChip.textContent = "Store Registration";
+    elements.authFormHeading.textContent = "Create store credentials";
+    elements.authFormNote.textContent =
+      "Register the store owner account that will manage inventory, sales, profit, and customer credit records.";
+    renderAuthGuide(
+      "Registration Checklist",
+      [
+        "Enter the official store name and the owner name you want shown on the dashboard.",
+        "Use an email address and password that the store will use for future sign-ins.",
+        "After registration, return to Store Sign In to open the business workspace.",
+      ]
+    );
+    renderAuthSupport(
+      "Already have a store account?",
+      "Return to Store Sign In to open the existing workspace for your business.",
+      [
+        { element: elements.authSupportPrimary, label: "Store Sign In", mode: "login" },
+        { element: elements.authSupportSecondary, label: "Administrator", mode: "admin" },
+      ]
+    );
   } else if (isAdmin) {
     renderAdminAuthMode();
   } else {
@@ -425,7 +464,51 @@ function renderAuthMode() {
       cloudMode
         ? "Use your registered email address and password to access the shared store workspace."
         : "Use your registered email address and password to access the store workspace on this browser.";
+    elements.authModeChip.textContent = "Store Sign In";
+    elements.authFormHeading.textContent = "Enter account credentials";
+    elements.authFormNote.textContent = "Sign in to open your inventory, sales, profit, and utang records.";
+    renderAuthGuide(
+      "Before You Continue",
+      [
+        "Use the email address registered for your store account.",
+        "Enter the current password assigned to that account.",
+        "Open Register Store if you still need to create a new workspace.",
+      ]
+    );
+    renderAuthSupport(
+      "Need a new store workspace?",
+      "Open Register Store to create a shared account for your business.",
+      [
+        { element: elements.authSupportPrimary, label: "Register Store", mode: "signup" },
+        { element: elements.authSupportSecondary, label: "Administrator", mode: "admin" },
+      ]
+    );
+    setAuthShortcut(elements.authLoginSignupButton, "Create Store Account", "signup");
   }
+}
+
+function renderAuthGuide(title, items) {
+  elements.authGuideTitle.textContent = title;
+  elements.authGuideList.innerHTML = items
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("");
+}
+
+function renderAuthSupport(title, text, shortcuts) {
+  elements.authSupportTitle.textContent = title;
+  elements.authSupportText.textContent = text;
+  shortcuts.forEach(({ element, label, mode }) => {
+    setAuthShortcut(element, label, mode);
+  });
+}
+
+function setAuthShortcut(element, label, mode) {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = label;
+  element.dataset.authShortcutMode = mode;
 }
 
 function renderVisibility() {
@@ -1646,6 +1729,26 @@ function renderAdminAuthMode() {
     elements.authTitle.textContent = "Administrator sign in";
     elements.authSubtitle.textContent =
       "Use an administrator account connected to the shared Supabase workspace to review all store accounts.";
+    elements.authModeChip.textContent = "Administrative Access";
+    elements.authFormHeading.textContent = "Enter administrator credentials";
+    elements.authFormNote.textContent =
+      "Use the approved administrator account that already has administrator access in Supabase.";
+    renderAuthGuide(
+      "Administrator Access",
+      [
+        "Sign in with the email address that already has the admin role in Supabase.",
+        "Administrative access is assigned in Supabase by updating the profile role to admin.",
+        "Store users should continue using Store Sign In for daily operations.",
+      ]
+    );
+    renderAuthSupport(
+      "Need store access instead?",
+      "Use the regular store sign-in or create a new store workspace for daily store work.",
+      [
+        { element: elements.authSupportPrimary, label: "Store Sign In", mode: "login" },
+        { element: elements.authSupportSecondary, label: "Register Store", mode: "signup" },
+      ]
+    );
     elements.adminSetupFields.hidden = true;
     elements.adminLoginFields.hidden = false;
     elements.adminModeNote.querySelector("span").textContent = "Cloud Administrator";
@@ -1661,6 +1764,33 @@ function renderAdminAuthMode() {
   elements.authSubtitle.textContent = hasAdmin
     ? "Use the administrator credentials assigned to this browser to review all locally stored store accounts."
     : "Create the administrator account for this browser to review all locally stored store accounts.";
+  elements.authModeChip.textContent = hasAdmin ? "Administrative Access" : "Administrator Setup";
+  elements.authFormHeading.textContent = hasAdmin ? "Enter administrator credentials" : "Create administrator credentials";
+  elements.authFormNote.textContent = hasAdmin
+    ? "Sign in with the administrator credentials assigned to this browser."
+    : "Create the one-time browser administrator account that can review all locally saved store accounts.";
+  renderAuthGuide(
+    hasAdmin ? "Administrator Access" : "Administrator Setup",
+    hasAdmin
+      ? [
+          "Only the assigned browser administrator may open the administrative workspace.",
+          "Use the saved administrator email address and password for this device.",
+          "Store users should return to Store Sign In for normal daily operations.",
+        ]
+      : [
+          "Create one administrator account for this browser to monitor all stored store accounts.",
+          "Choose a secure email address and password that only the supervisor will use.",
+          "After setup, store users should keep using regular store sign-in for daily operations.",
+        ]
+  );
+  renderAuthSupport(
+    "Need store access instead?",
+    "Use the regular store sign-in or register a store workspace for daily inventory work.",
+    [
+      { element: elements.authSupportPrimary, label: "Store Sign In", mode: "login" },
+      { element: elements.authSupportSecondary, label: "Register Store", mode: "signup" },
+    ]
+  );
   elements.adminSetupFields.hidden = hasAdmin;
   elements.adminLoginFields.hidden = !hasAdmin;
   elements.adminModeNote.querySelector("span").textContent = hasAdmin

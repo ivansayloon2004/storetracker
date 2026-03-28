@@ -8,7 +8,7 @@
     name="description"
     content="Track sari-sari store products, store-owner logins, and administrative monitoring in one formal dashboard."
   >
-  <link rel="stylesheet" href="styles.css?v=20260329a">
+  <link rel="stylesheet" href="styles.css?v=20260329b">
 </head>
 <body>
   <section class="auth-shell" id="auth-shell">
@@ -89,103 +89,175 @@
         </div>
 
         <div class="auth-panel">
-          <div class="auth-copy">
-            <p class="eyebrow">Access Control</p>
-            <h2 id="auth-title">Store account sign in</h2>
-            <p id="auth-subtitle">
-              Use your registered email address and password to access the shared store workspace.
-            </p>
+          <div class="auth-overview-grid">
+            <section class="auth-brief-card">
+              <div class="auth-copy">
+                <p class="eyebrow">Access Control</p>
+                <h2 id="auth-title">Store account sign in</h2>
+                <p id="auth-subtitle">
+                  Use your registered email address and password to access the shared store workspace.
+                </p>
+              </div>
+              <div class="auth-mode-chip" id="auth-mode-chip">Store Sign In</div>
+            </section>
+
+            <aside class="auth-helper-card">
+              <p class="eyebrow" id="auth-guide-title">Before You Continue</p>
+              <ul class="auth-helper-list" id="auth-guide-list">
+                <li>Use the email address registered for your store account.</li>
+                <li>Enter the current password assigned to that account.</li>
+                <li>Open Register Store if you still need to create a new workspace.</li>
+              </ul>
+            </aside>
           </div>
 
-          <form class="stack-form" id="login-form">
-            <label class="field">
-              <span>Email address</span>
-              <input id="login-email" type="email" placeholder="name@store.com" autocomplete="email" required>
-            </label>
-
-            <label class="field">
-              <span>Password</span>
-              <input id="login-password" type="password" minlength="6" placeholder="Enter your password" autocomplete="current-password" required>
-            </label>
-
-            <button class="button primary" type="submit">Log In</button>
-          </form>
-
-          <form class="stack-form" id="signup-form" hidden>
-            <label class="field">
-              <span>Store name</span>
-              <input id="signup-store-name" type="text" maxlength="80" placeholder="Ex. Aling Nena Store" required>
-            </label>
-
-            <label class="field">
-              <span>Owner name</span>
-              <input id="signup-owner-name" type="text" maxlength="80" placeholder="Ex. Maria Santos" required>
-            </label>
-
-            <label class="field">
-              <span>Email address</span>
-              <input id="signup-email" type="email" placeholder="name@store.com" autocomplete="email" required>
-            </label>
-
-            <div class="form-grid">
-              <label class="field">
-                <span>Password</span>
-                <input id="signup-password" type="password" minlength="6" placeholder="At least 6 characters" autocomplete="new-password" required>
-              </label>
-
-              <label class="field">
-                <span>Confirm password</span>
-                <input id="signup-confirm-password" type="password" minlength="6" placeholder="Repeat password" autocomplete="new-password" required>
-              </label>
+          <section class="auth-form-shell">
+            <div class="auth-form-head">
+              <div>
+                <p class="eyebrow">Credentials</p>
+                <h3 id="auth-form-heading">Enter account credentials</h3>
+              </div>
+              <p class="auth-form-note" id="auth-form-note">
+                Sign in to open your inventory, sales, profit, and utang records.
+              </p>
             </div>
 
-            <button class="button primary" type="submit">Create Store Account</button>
-          </form>
+            <form class="stack-form auth-credential-form" id="login-form">
+              <div class="auth-login-grid">
+                <div class="auth-login-main">
+                  <div class="auth-mini-grid">
+                    <article class="auth-mini-card">
+                      <span class="auth-mini-label">Workspace</span>
+                      <strong>Store account access</strong>
+                      <p>Open your inventory, sales, and utang records from one trusted dashboard.</p>
+                    </article>
 
-          <form class="stack-form" id="admin-form" hidden>
-            <div class="auth-note compact" id="admin-mode-note">
-              <span>Administrator Setup</span>
-              <p>Create the administrative account for this browser to monitor all locally stored users.</p>
-            </div>
+                    <article class="auth-mini-card">
+                      <span class="auth-mini-label">Sync</span>
+                      <strong>Shared store data</strong>
+                      <p>Use one email and password to reach the same store workspace across supported devices.</p>
+                    </article>
+                  </div>
 
-            <div id="admin-setup-fields">
+                  <div class="auth-field-stack">
+                    <label class="field">
+                      <span>Email address</span>
+                      <input id="login-email" type="email" placeholder="name@store.com" autocomplete="username" required>
+                    </label>
+
+                    <label class="field">
+                      <span>Password</span>
+                      <input id="login-password" type="password" minlength="6" placeholder="Enter your password" autocomplete="current-password" required>
+                    </label>
+                  </div>
+                </div>
+
+                <aside class="auth-login-side">
+                  <p class="eyebrow">Sign-In Guide</p>
+                  <strong>Before you continue</strong>
+                  <ul class="auth-login-points">
+                    <li>Use the email address registered for your store account.</li>
+                    <li>Your store records load after successful sign-in.</li>
+                    <li>Open Register Store first if your business still needs an account.</li>
+                  </ul>
+                </aside>
+              </div>
+
+              <div class="auth-form-actions">
+                <button class="button primary" type="submit">Log In</button>
+                <button class="button ghost" id="auth-login-signup-button" type="button">Create Store Account</button>
+              </div>
+
+              <p class="auth-security-note">
+                Each store account opens its own workspace with separate inventory, sales, profit, and customer credit records.
+              </p>
+            </form>
+
+            <form class="stack-form" id="signup-form" hidden>
               <label class="field">
-                <span>Administrator name</span>
-                <input id="admin-name" type="text" maxlength="80" placeholder="Ex. Operations Administrator">
+                <span>Store name</span>
+                <input id="signup-store-name" type="text" maxlength="80" placeholder="Ex. Aling Nena Store" required>
               </label>
 
               <label class="field">
-                <span>Administrator email</span>
-                <input id="admin-email" type="email" placeholder="admin@storetracker.com" autocomplete="email">
+                <span>Owner name</span>
+                <input id="signup-owner-name" type="text" maxlength="80" placeholder="Ex. Maria Santos" required>
+              </label>
+
+              <label class="field">
+                <span>Email address</span>
+                <input id="signup-email" type="email" placeholder="name@store.com" autocomplete="email" required>
               </label>
 
               <div class="form-grid">
                 <label class="field">
                   <span>Password</span>
-                  <input id="admin-password" type="password" minlength="6" placeholder="At least 6 characters" autocomplete="new-password">
+                  <input id="signup-password" type="password" minlength="6" placeholder="At least 6 characters" autocomplete="new-password" required>
                 </label>
 
                 <label class="field">
                   <span>Confirm password</span>
-                  <input id="admin-confirm-password" type="password" minlength="6" placeholder="Repeat password" autocomplete="new-password">
+                  <input id="signup-confirm-password" type="password" minlength="6" placeholder="Repeat password" autocomplete="new-password" required>
                 </label>
               </div>
+
+              <button class="button primary" type="submit">Create Store Account</button>
+            </form>
+
+            <form class="stack-form" id="admin-form" hidden>
+              <div class="auth-note compact" id="admin-mode-note">
+                <span>Administrator Setup</span>
+                <p>Create the administrative account for this browser to monitor all locally stored users.</p>
+              </div>
+
+              <div id="admin-setup-fields">
+                <label class="field">
+                  <span>Administrator name</span>
+                  <input id="admin-name" type="text" maxlength="80" placeholder="Ex. Operations Administrator">
+                </label>
+
+                <label class="field">
+                  <span>Administrator email</span>
+                  <input id="admin-email" type="email" placeholder="admin@storetracker.com" autocomplete="email">
+                </label>
+
+                <div class="form-grid">
+                  <label class="field">
+                    <span>Password</span>
+                    <input id="admin-password" type="password" minlength="6" placeholder="At least 6 characters" autocomplete="new-password">
+                  </label>
+
+                  <label class="field">
+                    <span>Confirm password</span>
+                    <input id="admin-confirm-password" type="password" minlength="6" placeholder="Repeat password" autocomplete="new-password">
+                  </label>
+                </div>
+              </div>
+
+              <div id="admin-login-fields" hidden>
+                <label class="field">
+                  <span>Administrator email</span>
+                  <input id="admin-login-email" type="email" placeholder="admin@storetracker.com" autocomplete="email">
+                </label>
+
+                <label class="field">
+                  <span>Password</span>
+                  <input id="admin-login-password" type="password" minlength="6" placeholder="Enter administrator password" autocomplete="current-password">
+                </label>
+              </div>
+
+              <button class="button primary" id="admin-submit" type="submit">Set Up Administrator</button>
+            </form>
+          </section>
+
+          <div class="auth-support-card">
+            <strong id="auth-support-title">Need a new store workspace?</strong>
+            <p id="auth-support-text">Open the Register Store tab to create a shared account for your business.</p>
+            <div class="auth-support-actions">
+              <button class="button ghost" id="auth-support-primary" type="button">Register Store</button>
+              <button class="button soft" id="auth-support-secondary" type="button">Administrator</button>
             </div>
-
-            <div id="admin-login-fields" hidden>
-              <label class="field">
-                <span>Administrator email</span>
-                <input id="admin-login-email" type="email" placeholder="admin@storetracker.com" autocomplete="email">
-              </label>
-
-              <label class="field">
-                <span>Password</span>
-                <input id="admin-login-password" type="password" minlength="6" placeholder="Enter administrator password" autocomplete="current-password">
-              </label>
-            </div>
-
-            <button class="button primary" id="admin-submit" type="submit">Set Up Administrator</button>
-          </form>
+          </div>
 
           <p class="auth-message" id="auth-message">Register a store account to begin using the shared inventory workspace.</p>
         </div>
@@ -1062,6 +1134,6 @@
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqaGZ1ZGJpZ2l2ZGt5c3N5eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDAwMjYsImV4cCI6MjA5MDI3NjAyNn0.IVkYuKz903sm7UiE2x3VtJhiDE20pO1t_-AJfHIXteI",
     };
   </script>
-  <script src="script.js?v=20260329a"></script>
+  <script src="script.js?v=20260329b"></script>
 </body>
 </html>
