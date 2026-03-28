@@ -21,6 +21,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
   day: "numeric",
   year: "numeric",
 });
+const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 
 let accounts = loadAccounts();
 let adminRecord = loadAdminRecord();
@@ -38,6 +39,12 @@ let authMode = "login";
 let feedbackTimer;
 let authMessageTimer;
 let adminFeedbackTimer;
+let scanStream = null;
+let scanDetector = null;
+let scanFrameId = 0;
+let scanLoopBusy = false;
+let lastScannedCode = "";
+let lastScannedAt = 0;
 
 const elements = {
   authShell: document.querySelector("#auth-shell"),
@@ -104,6 +111,14 @@ const elements = {
   productSku: document.querySelector("#product-sku"),
   productSubmit: document.querySelector("#product-submit"),
   productClear: document.querySelector("#product-clear"),
+  scannerVideo: document.querySelector("#scanner-video"),
+  scannerPlaceholder: document.querySelector("#scanner-placeholder"),
+  scannerStart: document.querySelector("#scanner-start"),
+  scannerStop: document.querySelector("#scanner-stop"),
+  scannerStatus: document.querySelector("#scanner-status"),
+  scannerManualForm: document.querySelector("#scanner-manual-form"),
+  scannerCodeInput: document.querySelector("#scanner-code-input"),
+  scannerLastSale: document.querySelector("#scanner-last-sale"),
   saleForm: document.querySelector("#sale-form"),
   saleProduct: document.querySelector("#sale-product"),
   saleQuantity: document.querySelector("#sale-quantity"),
@@ -166,6 +181,10 @@ function setupSegmentedTabs() {
 }
 
 function activateTab(group, targetId) {
+  if (group === "store-ops" && targetId !== "ops-scan") {
+    stopCameraScanner({ silent: true });
+  }
+
   const buttons = document.querySelectorAll(`[data-tab-group="${group}"]`);
   const panels = document.querySelectorAll(`[data-tab-panel="${group}"]`);
 
@@ -217,6 +236,13 @@ function setupEventListeners() {
 
   elements.productForm.addEventListener("submit", handleProductSubmit);
   elements.productClear.addEventListener("click", resetProductForm);
+  elements.scannerStart.addEventListener("click", () => {
+    void startCameraScanner();
+  });
+  elements.scannerStop.addEventListener("click", () => {
+    stopCameraScanner();
+  });
+  elements.scannerManualForm.addEventListener("submit", handleScannerManualSubmit);
   elements.saleForm.addEventListener("submit", handleSaleSubmit);
   elements.restockForm.addEventListener("submit", handleRestockSubmit);
   elements.saleProduct.addEventListener("change", updateSalePreview);
@@ -242,12 +268,14 @@ function syncInterface() {
   renderVisibility();
 
   if (currentAdmin) {
+    stopCameraScanner({ silent: true });
     resetAuthForms();
     renderAdminDashboard();
   } else if (currentAccount) {
     resetAuthForms();
     renderAll();
   } else {
+    stopCameraScanner({ silent: true });
     document.title = "Tindahan Tracker | Inventory Management Suite";
     setAuthMessage(defaultAuthMessage());
   }
@@ -609,7 +637,7 @@ function buildDefaultState() {
 function buildProduct(product) {
   return {
     id: product.id || uid("product"),
-    sku: `${product.sku || ""}`.trim(),
+    sku: normalizeCode(product.sku || ""),
     name: `${product.name || ""}`.trim(),
     category: `${product.category || "General"}`.trim(),
     unit: `${product.unit || "pc"}`.trim(),
@@ -671,7 +699,7 @@ function normalizeProduct(product) {
 
   return {
     id: `${product.id || uid("product")}`,
-    sku: `${product.sku || ""}`.trim(),
+    sku: normalizeCode(product.sku || ""),
     name: product.name.trim(),
     category: `${product.category || "General"}`.trim() || "General",
     unit: `${product.unit || "pc"}`.trim() || "pc",
@@ -680,6 +708,13 @@ function normalizeProduct(product) {
     reorderLevel: roundNumber(product.reorderLevel),
     updatedAt: normalizeDate(product.updatedAt),
   };
+}
+
+function normalizeCode(value) {
+  return `${value || ""}`
+    .trim()
+    .replace(/\s+/g, "")
+    .toUpperCase();
 }
 
 function normalizeTransaction(transaction) {
@@ -921,6 +956,7 @@ async function handleAdminSubmit(event) {
 }
 
 function logoutCurrentAccount() {
+  stopCameraScanner({ silent: true });
   clearSession();
   currentAccount = null;
   currentAdmin = null;
@@ -932,6 +968,7 @@ function logoutCurrentAccount() {
 }
 
 function logoutAdmin() {
+  stopCameraScanner({ silent: true });
   clearSession();
   currentAdmin = null;
   currentAccount = null;
@@ -1285,7 +1322,7 @@ function renderInventory() {
             <td>
               <div class="product-cell">
                 <span class="product-name">${escapeHtml(product.name)}</span>
-                <span class="product-meta">${escapeHtml(product.sku || "No SKU")}</span>
+                <span class="product-meta">${escapeHtml(product.sku ? `Code: ${product.sku}` : "No barcode or code")}</span>
               </div>
             </td>
             <td>
@@ -1486,7 +1523,7 @@ function handleProductSubmit(event) {
     price: roundMoney(elements.productPrice.value),
     stock: roundNumber(elements.productStock.value),
     reorderLevel: roundNumber(elements.productReorder.value),
-    sku: elements.productSku.value.trim(),
+    sku: normalizeCode(elements.productSku.value),
     updatedAt: new Date().toISOString(),
   };
 
@@ -1497,6 +1534,11 @@ function handleProductSubmit(event) {
 
   if (product.stock < 0 || product.price < 0 || product.reorderLevel < 0) {
     setFeedback("Stock, price, and reorder level cannot be negative.", "danger");
+    return;
+  }
+
+  if (product.sku && state.products.some((item) => item.id !== productId && normalizeCode(item.sku) === product.sku)) {
+    setFeedback("That barcode or product code is already assigned to another item.", "danger");
     return;
   }
 
@@ -1515,26 +1557,20 @@ function handleProductSubmit(event) {
   resetProductForm();
 }
 
-function handleSaleSubmit(event) {
-  event.preventDefault();
-
-  const product = getProductById(elements.saleProduct.value);
-  const quantity = roundNumber(elements.saleQuantity.value);
-  const note = elements.saleNote.value.trim();
-
+function recordSale(product, quantity, note, options = {}) {
   if (!product) {
-    setFeedback("Choose a product before recording a sale.", "danger");
-    return;
+    return { ok: false, message: "Choose a product before recording a sale." };
   }
 
   if (quantity <= 0) {
-    setFeedback("Sale quantity must be greater than zero.", "danger");
-    return;
+    return { ok: false, message: "Sale quantity must be greater than zero." };
   }
 
   if (product.stock < quantity) {
-    setFeedback(`Only ${formatQuantity(product.stock)} ${product.unit} of ${product.name} are left in stock.`, "danger");
-    return;
+    return {
+      ok: false,
+      message: `Only ${formatQuantity(product.stock)} ${product.unit} of ${product.name} are left in stock.`,
+    };
   }
 
   product.stock = roundNumber(product.stock - quantity);
@@ -1553,8 +1589,29 @@ function handleSaleSubmit(event) {
     occurredAt: new Date().toISOString(),
   });
 
-  addActivity("sale", `Logged sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`, product);
-  saveAndRefresh(`${product.name} sale saved.`, "success");
+  addActivity(
+    "sale",
+    options.activityMessage || `Logged sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
+    product
+  );
+  saveAndRefresh(options.feedbackMessage || `${product.name} sale saved.`, "success");
+
+  return { ok: true, product };
+}
+
+function handleSaleSubmit(event) {
+  event.preventDefault();
+
+  const product = getProductById(elements.saleProduct.value);
+  const quantity = roundNumber(elements.saleQuantity.value);
+  const note = elements.saleNote.value.trim();
+
+  const result = recordSale(product, quantity, note);
+  if (!result.ok) {
+    setFeedback(result.message, "danger");
+    return;
+  }
+
   elements.saleForm.reset();
   updateSalePreview();
 }
@@ -1714,6 +1771,221 @@ function updateRestockPreview() {
   elements.restockPreview.textContent = `New stock after restock: ${formatQuantity(product.stock + quantity)} ${
     product.unit
   }. Added value: ${currencyFormatter.format(quantity * product.price)}.`;
+}
+
+async function handleScannerManualSubmit(event) {
+  event.preventDefault();
+
+  const code = normalizeCode(elements.scannerCodeInput.value);
+  if (!code) {
+    setScannerStatus("Enter or scan a barcode before selling from code.", "warning");
+    return;
+  }
+
+  await processScannedCode(code, "manual");
+}
+
+function setScannerStatus(message, tone = "default") {
+  elements.scannerStatus.textContent = message;
+
+  if (tone === "default") {
+    delete elements.scannerStatus.dataset.tone;
+  } else {
+    elements.scannerStatus.dataset.tone = tone;
+  }
+}
+
+function updateScannerSurface() {
+  const isActive = Boolean(scanStream);
+  elements.scannerVideo.hidden = !isActive;
+  elements.scannerPlaceholder.hidden = isActive;
+  elements.scannerStart.disabled = isActive;
+  elements.scannerStop.disabled = !isActive;
+}
+
+async function buildScanDetector() {
+  if (!("BarcodeDetector" in window)) {
+    return null;
+  }
+
+  try {
+    if (typeof BarcodeDetector.getSupportedFormats === "function") {
+      const supportedFormats = await BarcodeDetector.getSupportedFormats();
+      const formats = SCAN_FORMATS.filter((format) => supportedFormats.includes(format));
+      return formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+    }
+
+    return new BarcodeDetector();
+  } catch (error) {
+    console.warn("Unable to initialize barcode detector.", error);
+    return null;
+  }
+}
+
+async function startCameraScanner() {
+  if (!currentAccount) {
+    return;
+  }
+
+  activateTab("store-ops", "ops-scan");
+
+  if (scanStream) {
+    setScannerStatus("Camera scanner is already active.", "success");
+    return;
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setScannerStatus("This browser cannot open the camera. Use manual barcode entry instead.", "warning");
+    return;
+  }
+
+  scanDetector = await buildScanDetector();
+  if (!scanDetector) {
+    setScannerStatus(
+      "Live camera scanning is not available on this browser. Use manual barcode entry or a handheld scanner.",
+      "warning"
+    );
+    return;
+  }
+
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+
+    elements.scannerVideo.srcObject = scanStream;
+    await elements.scannerVideo.play();
+    scanLoopBusy = false;
+    lastScannedCode = "";
+    lastScannedAt = 0;
+    updateScannerSurface();
+    setScannerStatus("Camera scanner is active. Each recognized code records one sale unit.", "success");
+    queueScanFrame();
+  } catch (error) {
+    console.error("Unable to start barcode scanner.", error);
+    stopCameraScanner({ silent: true });
+    setScannerStatus("Camera access was not granted. Allow camera access and try again.", "danger");
+  }
+}
+
+function queueScanFrame() {
+  if (!scanStream) {
+    return;
+  }
+
+  if (scanFrameId) {
+    window.cancelAnimationFrame(scanFrameId);
+  }
+
+  scanFrameId = window.requestAnimationFrame(() => {
+    void scanFrame();
+  });
+}
+
+async function scanFrame() {
+  if (!scanStream) {
+    return;
+  }
+
+  if (scanLoopBusy || elements.scannerVideo.readyState < 2) {
+    queueScanFrame();
+    return;
+  }
+
+  scanLoopBusy = true;
+
+  try {
+    const barcodes = await scanDetector.detect(elements.scannerVideo);
+    if (Array.isArray(barcodes) && barcodes.length) {
+      const code = normalizeCode(barcodes[0].rawValue);
+      const now = Date.now();
+
+      if (code && (code !== lastScannedCode || now - lastScannedAt > 1600)) {
+        lastScannedCode = code;
+        lastScannedAt = now;
+        await processScannedCode(code, "camera");
+      }
+    }
+  } catch (error) {
+    console.warn("Barcode detection failed for this frame.", error);
+  } finally {
+    scanLoopBusy = false;
+    queueScanFrame();
+  }
+}
+
+function stopCameraScanner(options = {}) {
+  if (scanFrameId) {
+    window.cancelAnimationFrame(scanFrameId);
+    scanFrameId = 0;
+  }
+
+  scanLoopBusy = false;
+  scanDetector = null;
+  lastScannedCode = "";
+  lastScannedAt = 0;
+
+  if (elements.scannerVideo.srcObject) {
+    const mediaStream = elements.scannerVideo.srcObject;
+    mediaStream.getTracks().forEach((track) => track.stop());
+    elements.scannerVideo.srcObject = null;
+  }
+
+  if (scanStream) {
+    scanStream.getTracks().forEach((track) => track.stop());
+    scanStream = null;
+  }
+
+  updateScannerSurface();
+
+  if (!options.silent) {
+    setScannerStatus("Camera scanner is off. Start the camera when you are ready to scan again.");
+  }
+}
+
+async function processScannedCode(rawCode, source) {
+  const code = normalizeCode(rawCode);
+  if (!code) {
+    setScannerStatus("A valid barcode is required before a scan can be recorded.", "warning");
+    return;
+  }
+
+  const product = getProductByCode(code);
+  if (!product) {
+    setScannerStatus(
+      `No product matches code ${code}. Save that barcode in the product code field first.`,
+      "danger"
+    );
+    elements.scannerLastSale.textContent = `Last scanned code: ${code}. No matching product was found.`;
+    elements.scannerCodeInput.value = "";
+    return;
+  }
+
+  const result = recordSale(product, 1, `${source === "camera" ? "Camera" : "Manual"} barcode scan: ${code}`, {
+    activityMessage: `Recorded barcode sale for 1 ${product.unit} of ${product.name}.`,
+    feedbackMessage: `${product.name} was sold from barcode scan.`,
+  });
+
+  if (!result.ok) {
+    setScannerStatus(result.message, "danger");
+    elements.scannerLastSale.textContent = `${product.name} was not sold because the stock is too low.`;
+    elements.scannerCodeInput.value = "";
+    return;
+  }
+
+  setScannerStatus(
+    `${product.name} recorded successfully. ${formatQuantity(product.stock)} ${product.unit} remaining.`,
+    "success"
+  );
+  elements.scannerLastSale.textContent = `${product.name} | Code: ${code} | Remaining stock: ${formatQuantity(
+    product.stock
+  )} ${product.unit}`;
+  elements.scannerCodeInput.value = "";
 }
 
 function exportState() {
@@ -1876,6 +2148,11 @@ function getStatusScore(status) {
 
 function getProductById(productId) {
   return state.products.find((product) => product.id === productId);
+}
+
+function getProductByCode(code) {
+  const normalizedCode = normalizeCode(code);
+  return state.products.find((product) => normalizeCode(product.sku) === normalizedCode) || null;
 }
 
 function getCategorySummaries() {

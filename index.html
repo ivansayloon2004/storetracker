@@ -236,13 +236,13 @@
               <p class="eyebrow">Inventory Board</p>
               <h2 id="inventory-heading">Product inventory</h2>
             </div>
-            <p class="panel-copy">Search by item name, SKU, or category and review stock status with a consistent operational view.</p>
+            <p class="panel-copy">Search by item name, code, or category and review stock status with a consistent operational view.</p>
           </div>
 
           <div class="toolbar">
             <label class="field search-field">
               <span>Search</span>
-              <input id="search-input" type="search" placeholder="Ex. coffee, noodles, canned goods">
+              <input id="search-input" type="search" placeholder="Ex. coffee, noodles, 4801234567890">
             </label>
 
             <label class="field">
@@ -307,6 +307,9 @@
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-restock">
               Restock
             </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-scan">
+              Scan
+            </button>
           </div>
 
           <div class="tab-panel is-active" id="ops-product" data-tab-panel="store-ops">
@@ -351,8 +354,8 @@
                 </label>
 
                 <label class="field">
-                  <span>SKU or code</span>
-                  <input id="product-sku" type="text" maxlength="30" placeholder="Optional">
+                  <span>Barcode or product code</span>
+                  <input id="product-sku" type="text" maxlength="40" placeholder="Scan or type the barcode">
                 </label>
               </div>
 
@@ -411,6 +414,44 @@
 
               <button class="button primary" type="submit">Record Restock</button>
             </form>
+          </div>
+
+          <div class="tab-panel" id="ops-scan" data-tab-panel="store-ops" hidden>
+            <h3 class="tab-section-title">Scan to sell</h3>
+            <p class="section-intro">Use your phone camera or a barcode scanner to record one item sold for every recognized product code.</p>
+
+            <div class="scanner-stage">
+              <video class="scanner-video" id="scanner-video" autoplay playsinline muted hidden></video>
+              <div class="scanner-placeholder" id="scanner-placeholder">
+                Camera preview appears here after you start the scanner.
+              </div>
+            </div>
+
+            <div class="scan-actions">
+              <button class="button primary" id="scanner-start" type="button">Start Camera Scanner</button>
+              <button class="button ghost" id="scanner-stop" type="button" disabled>Stop Scanner</button>
+            </div>
+
+            <p class="form-preview" id="scanner-status">
+              Save each product's barcode in the Barcode or product code field, then scan to record a sale automatically.
+            </p>
+
+            <form class="scan-manual-form" id="scanner-manual-form">
+              <label class="field">
+                <span>Manual code entry</span>
+                <input
+                  id="scanner-code-input"
+                  type="text"
+                  maxlength="60"
+                  placeholder="Scan with a handheld scanner or type the barcode"
+                  autocomplete="off"
+                >
+              </label>
+
+              <button class="button ghost" type="submit">Sell From Code</button>
+            </form>
+
+            <p class="scanner-last-sale" id="scanner-last-sale">No barcode sale has been recorded yet.</p>
           </div>
         </section>
 
