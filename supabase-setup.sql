@@ -2,6 +2,17 @@ create extension if not exists pgcrypto;
 
 create schema if not exists private;
 
+create table if not exists public.profiles (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  role text not null default 'store' check (role in ('store', 'admin')),
+  store_name text not null default 'My Store',
+  owner_name text not null default 'Store Owner',
+  email text not null,
+  created_at timestamptz not null default timezone('utc', now()),
+  updated_at timestamptz not null default timezone('utc', now()),
+  last_login_at timestamptz not null default timezone('utc', now())
+);
+
 create or replace function private.is_admin()
 returns boolean
 language sql
@@ -15,17 +26,6 @@ as $$
       and role = 'admin'
   );
 $$;
-
-create table if not exists public.profiles (
-  user_id uuid primary key references auth.users (id) on delete cascade,
-  role text not null default 'store' check (role in ('store', 'admin')),
-  store_name text not null default 'My Store',
-  owner_name text not null default 'Store Owner',
-  email text not null,
-  created_at timestamptz not null default timezone('utc', now()),
-  updated_at timestamptz not null default timezone('utc', now()),
-  last_login_at timestamptz not null default timezone('utc', now())
-);
 
 create table if not exists public.products (
   id text primary key,
