@@ -723,54 +723,60 @@
 
   <div class="page-shell" id="admin-shell" hidden>
     <header class="hero panel admin-hero">
-      <div class="hero-copy">
-        <p class="eyebrow">Administrative Oversight</p>
-        <h1>Administrative Control Panel</h1>
+      <div class="hero-copy admin-hero-copy">
+        <div class="hero-kicker">
+          <p class="eyebrow">Administrative Oversight</p>
+          <span class="hero-badge">Centralized workspace review</span>
+        </div>
+        <h1>Administrative Dashboard</h1>
         <p class="hero-lead">
-          Review locally stored store accounts, identify operational risk, and monitor cross-store activity from a single administrative workspace.
+          Review registered store accounts, monitor inventory exposure, and track recent operational activity from one centralized administrative workspace.
         </p>
         <div class="hero-notes">
           <span id="admin-today-label">Loading admin snapshot...</span>
-          <span id="admin-coverage-note">This administrative view covers locally stored browser data only.</span>
+          <span id="admin-coverage-note">Loading workspace coverage...</span>
         </div>
       </div>
 
-      <div class="hero-controls">
-        <div class="hero-actions">
+      <div class="hero-controls admin-hero-controls">
+        <div class="hero-actions admin-hero-actions">
           <button class="button ghost" id="admin-export-button" type="button">Export User Report</button>
           <button class="button ghost" id="admin-logout-button" type="button">Log Out</button>
         </div>
 
-        <div class="account-card">
-          <p class="eyebrow">Administrator Session</p>
+        <div class="account-card admin-session-card">
+          <div class="account-card-head">
+            <p class="eyebrow">Administrator Session</p>
+            <span class="session-status">Active</span>
+          </div>
           <h2 id="admin-name-display">Administrator</h2>
           <p id="admin-email-display">admin@storetracker.com</p>
         </div>
 
-        <p class="feedback-message" id="admin-feedback-message">Administrative monitoring is active.</p>
+        <p class="feedback-message admin-feedback-banner" id="admin-feedback-message">Administrative monitoring is active.</p>
       </div>
     </header>
 
     <section class="stats-grid" aria-label="Admin summary">
-      <article class="panel stat-card">
+      <article class="panel stat-card admin-stat-card">
         <p class="stat-label">Store Accounts</p>
         <h2 class="stat-value" id="admin-total-users">0</h2>
         <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
       </article>
 
-      <article class="panel stat-card">
+      <article class="panel stat-card admin-stat-card">
         <p class="stat-label">Tracked Products</p>
         <h2 class="stat-value" id="admin-total-products">0</h2>
         <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
       </article>
 
-      <article class="panel stat-card">
+      <article class="panel stat-card admin-stat-card">
         <p class="stat-label">Combined Stock Value</p>
         <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
         <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
       </article>
 
-      <article class="panel stat-card">
+      <article class="panel stat-card admin-stat-card">
         <p class="stat-label">Stores Requiring Attention</p>
         <h2 class="stat-value" id="admin-risk-stores">0</h2>
         <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
@@ -779,16 +785,16 @@
 
     <div class="dashboard-grid admin-dashboard-grid">
       <section class="dashboard-main">
-        <section class="panel inventory-panel" aria-labelledby="admin-users-title">
-          <div class="panel-head">
-            <div>
-              <p class="eyebrow">User Registry</p>
-              <h2 id="admin-users-title">Store account directory</h2>
+        <section class="panel inventory-panel admin-directory-panel" aria-labelledby="admin-users-title">
+          <div class="panel-head panel-head-stack">
+            <div class="panel-heading">
+              <p class="eyebrow">Store Registry</p>
+              <h2 id="admin-users-title">Store Account Directory</h2>
+              <p class="panel-copy">Review product volume, inventory value, daily sales, and operational alerts for each registered store account.</p>
             </div>
-            <p class="panel-copy">Review product count, stock value, low-stock exposure, and latest activity for each registered account.</p>
           </div>
 
-          <div class="inventory-summary">
+          <div class="inventory-summary admin-summary-bar">
             <p id="admin-summary-text">Showing 0 store accounts</p>
             <p id="admin-summary-note">Local browser coverage only</p>
           </div>
@@ -814,17 +820,18 @@
       </section>
 
       <aside class="dashboard-side admin-side-stack">
-        <section class="panel tabbed-panel" aria-labelledby="admin-monitoring-title">
-          <div class="panel-head compact">
-            <div>
+        <section class="panel tabbed-panel admin-monitor-panel" aria-labelledby="admin-monitoring-title">
+          <div class="panel-head compact panel-head-stack">
+            <div class="panel-heading">
               <p class="eyebrow">Administrative Review</p>
-              <h2 id="admin-monitoring-title">Monitoring panels</h2>
+              <h2 id="admin-monitoring-title">Operations Monitoring</h2>
+              <p class="panel-copy">Track inventory risk, recent store activity, and the latest sign-in history across the monitored workspace.</p>
             </div>
           </div>
 
           <div class="segmented-tabs" role="tablist" aria-label="Admin monitoring panels">
             <button class="segment-button is-active" type="button" role="tab" aria-selected="true" data-tab-group="admin-monitoring" data-tab-target="admin-attention-panel">
-              Attention
+              Risk
             </button>
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="admin-monitoring" data-tab-target="admin-activity-panel">
               Activity
@@ -836,14 +843,14 @@
 
           <div class="tab-panel is-active" id="admin-attention-panel" data-tab-panel="admin-monitoring">
             <div class="section-intro">
-              Accounts with low inventory coverage or out-of-stock items at present.
+              Accounts with low inventory coverage or out-of-stock items that currently require review.
             </div>
             <div class="list-stack scroll-list" id="admin-attention-list"></div>
           </div>
 
           <div class="tab-panel" id="admin-activity-panel" data-tab-panel="admin-monitoring" hidden>
             <div class="section-intro">
-              Recent actions drawn from all registered store accounts on this browser.
+              Recent operational activity recorded across registered store accounts in this workspace.
             </div>
             <div class="activity-list scroll-list" id="admin-activity-list"></div>
           </div>

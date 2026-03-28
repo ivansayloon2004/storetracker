@@ -1803,7 +1803,7 @@ function renderAdminDashboard() {
     return;
   }
 
-  document.title = "Administrative Control Panel | Tindahan Tracker";
+  document.title = "Administrative Dashboard | Tindahan Tracker";
   renderAdminProfile();
   renderAdminStats();
   renderAdminUsersTable();
@@ -1827,11 +1827,11 @@ function renderAccountProfile() {
 function renderAdminProfile() {
   const summaries = getAdminStoreSummaries();
   elements.adminTodayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
-  elements.adminCoverageNote.textContent = `Reviewing ${summaries.length} ${
+  elements.adminCoverageNote.textContent = `Coverage: ${summaries.length} ${
     cloudMode ? "shared" : "locally stored"
   } store account${
     summaries.length === 1 ? "" : "s"
-  }.`;
+  } under review.`;
   elements.adminNameDisplay.textContent = currentAdmin.name;
   elements.adminEmailDisplay.textContent = currentAdmin.email;
 }
@@ -2041,19 +2041,19 @@ function renderAdminStats() {
   const riskStores = summaries.filter((summary) => summary.lowStockCount > 0).length;
 
   elements.adminTotalUsers.textContent = numberFormatter.format(totalUsers);
-  elements.adminUsersFoot.textContent = `${totalUsers} store account${totalUsers === 1 ? "" : "s"} ${
-    cloudMode ? "registered in the shared workspace" : "registered on this browser"
+  elements.adminUsersFoot.textContent = `${totalUsers} registered store account${totalUsers === 1 ? "" : "s"} ${
+    cloudMode ? "in the shared workspace" : "on this device"
   }`;
   elements.adminTotalProducts.textContent = numberFormatter.format(totalProducts);
   elements.adminProductsFoot.textContent = `${totalProducts} products recorded across all ${
-    cloudMode ? "shared" : "local"
-  } stores`;
+    cloudMode ? "shared store workspaces" : "local store workspaces"
+  }`;
   elements.adminTotalValue.textContent = currencyFormatter.format(totalValue);
-  elements.adminValueFoot.textContent = `Today's combined sales: ${currencyFormatter.format(totalTodaySales)}`;
+  elements.adminValueFoot.textContent = `Combined sales today: ${currencyFormatter.format(totalTodaySales)}`;
   elements.adminRiskStores.textContent = numberFormatter.format(riskStores);
   elements.adminRiskFoot.textContent = riskStores
-    ? `${riskStores} store${riskStores === 1 ? "" : "s"} need restock attention`
-    : "No stores currently require restock attention";
+    ? `${riskStores} store${riskStores === 1 ? "" : "s"} require inventory review`
+    : "No stores currently require inventory review";
 }
 
 function renderAdminUsersTable() {
@@ -2101,14 +2101,14 @@ function renderAdminUsersTable() {
       .join("");
   }
 
-  elements.adminSummaryText.textContent = `Showing ${summaries.length} ${
-    cloudMode ? "shared" : "locally stored"
+  elements.adminSummaryText.textContent = `Showing ${summaries.length} registered ${
+    cloudMode ? "shared" : "local"
   } store account${
     summaries.length === 1 ? "" : "s"
   }`;
   elements.adminSummaryNote.textContent = cloudMode
-    ? "This panel reports on all accounts in the shared Supabase workspace."
-    : "This panel reports only on accounts saved on this browser and device.";
+    ? "Coverage includes all accounts in the shared Supabase workspace."
+    : "Coverage includes only the accounts saved on this browser and device.";
 }
 
 function renderAdminAttentionList() {
@@ -2177,7 +2177,7 @@ function renderAdminOwnerList() {
   if (!summaries.length) {
     elements.adminOwnerList.innerHTML = `
       <div class="empty-state">
-        Register store accounts first to populate this administrative view.
+        Register store accounts first to populate the administrative sign-in view.
       </div>
     `;
     return;
