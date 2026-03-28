@@ -202,34 +202,34 @@
       </div>
     </header>
 
+    <section class="stats-grid" aria-label="Store summary">
+      <article class="panel stat-card">
+        <p class="stat-label">Tracked Products</p>
+        <h2 class="stat-value" id="total-skus">0</h2>
+        <p class="stat-foot" id="total-units-foot">0 units on hand</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Retail Stock Value</p>
+        <h2 class="stat-value" id="inventory-value">PHP 0.00</h2>
+        <p class="stat-foot" id="stock-value-foot">Based on your selling price</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Sales Today</p>
+        <h2 class="stat-value" id="today-sales">PHP 0.00</h2>
+        <p class="stat-foot" id="today-sales-foot">0 sales logged today</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Low Stock Watch</p>
+        <h2 class="stat-value" id="low-stock-count">0</h2>
+        <p class="stat-foot" id="low-stock-foot">No stock alerts at present</p>
+      </article>
+    </section>
+
     <div class="dashboard-grid store-dashboard-grid">
       <section class="dashboard-main">
-        <section class="stats-grid" aria-label="Store summary">
-          <article class="panel stat-card">
-            <p class="stat-label">Tracked Products</p>
-            <h2 class="stat-value" id="total-skus">0</h2>
-            <p class="stat-foot" id="total-units-foot">0 units on hand</p>
-          </article>
-
-          <article class="panel stat-card">
-            <p class="stat-label">Retail Stock Value</p>
-            <h2 class="stat-value" id="inventory-value">PHP 0.00</h2>
-            <p class="stat-foot" id="stock-value-foot">Based on your selling price</p>
-          </article>
-
-          <article class="panel stat-card">
-            <p class="stat-label">Sales Today</p>
-            <h2 class="stat-value" id="today-sales">PHP 0.00</h2>
-            <p class="stat-foot" id="today-sales-foot">0 sales logged today</p>
-          </article>
-
-          <article class="panel stat-card">
-            <p class="stat-label">Low Stock Watch</p>
-            <h2 class="stat-value" id="low-stock-count">0</h2>
-            <p class="stat-foot" id="low-stock-foot">No stock alerts at present</p>
-          </article>
-        </section>
-
         <section class="panel inventory-panel" aria-labelledby="inventory-heading">
           <div class="panel-head">
             <div>
@@ -295,7 +295,6 @@
               <p class="eyebrow">Daily Operations</p>
               <h2 id="operations-title">Store controls</h2>
             </div>
-            <p class="panel-copy">Manage products, sales, and restocks from one compact control area.</p>
           </div>
 
           <div class="segmented-tabs" role="tablist" aria-label="Store controls">
@@ -421,7 +420,6 @@
               <p class="eyebrow">Store Insights</p>
               <h2 id="store-insights-title">Operational review</h2>
             </div>
-            <p class="panel-copy">Switch between alerts, performance, and recent activity without leaving the dashboard.</p>
           </div>
 
           <div class="segmented-tabs" role="tablist" aria-label="Store insights">
@@ -495,34 +493,34 @@
       </div>
     </header>
 
+    <section class="stats-grid" aria-label="Admin summary">
+      <article class="panel stat-card">
+        <p class="stat-label">Store Accounts</p>
+        <h2 class="stat-value" id="admin-total-users">0</h2>
+        <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Tracked Products</p>
+        <h2 class="stat-value" id="admin-total-products">0</h2>
+        <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Combined Stock Value</p>
+        <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
+        <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Stores Requiring Attention</p>
+        <h2 class="stat-value" id="admin-risk-stores">0</h2>
+        <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
+      </article>
+    </section>
+
     <div class="dashboard-grid admin-dashboard-grid">
       <section class="dashboard-main">
-        <section class="stats-grid" aria-label="Admin summary">
-          <article class="panel stat-card">
-            <p class="stat-label">Store Accounts</p>
-            <h2 class="stat-value" id="admin-total-users">0</h2>
-            <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
-          </article>
-
-          <article class="panel stat-card">
-            <p class="stat-label">Tracked Products</p>
-            <h2 class="stat-value" id="admin-total-products">0</h2>
-            <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
-          </article>
-
-          <article class="panel stat-card">
-            <p class="stat-label">Combined Stock Value</p>
-            <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
-            <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
-          </article>
-
-          <article class="panel stat-card">
-            <p class="stat-label">Stores Requiring Attention</p>
-            <h2 class="stat-value" id="admin-risk-stores">0</h2>
-            <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
-          </article>
-        </section>
-
         <section class="panel inventory-panel" aria-labelledby="admin-users-title">
           <div class="panel-head">
             <div>
@@ -564,7 +562,6 @@
               <p class="eyebrow">Administrative Review</p>
               <h2 id="admin-monitoring-title">Monitoring panels</h2>
             </div>
-            <p class="panel-copy">Switch between risk alerts, account activity, and sign-in monitoring from one compact panel.</p>
           </div>
 
           <div class="segmented-tabs" role="tablist" aria-label="Admin monitoring panels">
