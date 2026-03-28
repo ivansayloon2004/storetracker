@@ -67,8 +67,6 @@ const elements = {
   authShell: document.querySelector("#auth-shell"),
   appShell: document.querySelector("#app-shell"),
   adminShell: document.querySelector("#admin-shell"),
-  quickNav: document.querySelector(".quick-nav"),
-  quickNavButtons: document.querySelectorAll("[data-quick-group][data-quick-target]"),
   busyOverlay: document.querySelector("#busy-overlay"),
   busyLabel: document.querySelector("#busy-label"),
   authTabs: document.querySelector("#auth-tabs"),
@@ -330,14 +328,6 @@ function setupEventListeners() {
 
   elements.adminForm.addEventListener("submit", (event) => {
     void handleAdminSubmit(event);
-  });
-
-  elements.quickNavButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      activateTab(button.dataset.quickGroup, button.dataset.quickTarget);
-      const shellTarget = button.dataset.quickGroup === "store-ops" ? elements.appShell : elements.appShell;
-      shellTarget.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
   });
 
   elements.searchInput.addEventListener("input", (event) => {
