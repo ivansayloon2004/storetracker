@@ -334,6 +334,12 @@
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-scan">
               Scan
             </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-utang">
+              Utang
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-expense">
+              Expenses
+            </button>
           </div>
 
           <div class="tab-panel is-active" id="ops-product" data-tab-panel="store-ops">
@@ -477,6 +483,106 @@
 
             <p class="scanner-last-sale" id="scanner-last-sale">No barcode sale has been recorded yet.</p>
           </div>
+
+          <div class="tab-panel" id="ops-utang" data-tab-panel="store-ops" hidden>
+            <h3 class="tab-section-title">Track customer utang</h3>
+            <p class="section-intro">Record new customer credit or mark a payment to keep balances updated without using a separate notebook.</p>
+
+            <form class="stack-form" id="debt-form">
+              <div class="form-grid">
+                <label class="field">
+                  <span>Customer name</span>
+                  <input id="debt-customer-name" type="text" maxlength="80" placeholder="Ex. Juan Dela Cruz" required>
+                </label>
+
+                <label class="field">
+                  <span>Entry type</span>
+                  <select id="debt-type" required>
+                    <option value="charge">Add utang</option>
+                    <option value="payment">Record payment</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Amount (PHP)</span>
+                  <input id="debt-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+                </label>
+
+                <label class="field">
+                  <span>Note</span>
+                  <input id="debt-note" type="text" maxlength="100" placeholder="Optional note">
+                </label>
+              </div>
+
+              <p class="form-preview" id="debt-preview">Customer balances will update as soon as each utang or payment entry is saved.</p>
+
+              <button class="button primary" type="submit">Save Utang Entry</button>
+            </form>
+
+            <div class="summary-chip-grid">
+              <article class="summary-chip">
+                <span>Total receivables</span>
+                <strong id="debt-total-balance">PHP 0.00</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Active customers</span>
+                <strong id="debt-active-customers">0</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Latest payment</span>
+                <strong id="debt-last-payment">No payments yet</strong>
+              </article>
+            </div>
+
+            <div class="list-stack scroll-list" id="debt-customer-list"></div>
+          </div>
+
+          <div class="tab-panel" id="ops-expense" data-tab-panel="store-ops" hidden>
+            <h3 class="tab-section-title">Record an expense</h3>
+            <p class="section-intro">Capture electricity, restocking trips, rent, and other costs so your profit reports stay realistic.</p>
+
+            <form class="stack-form" id="expense-form">
+              <div class="form-grid">
+                <label class="field">
+                  <span>Category</span>
+                  <input id="expense-category" type="text" maxlength="50" placeholder="Ex. Electricity, Delivery, Supplies" required>
+                </label>
+
+                <label class="field">
+                  <span>Amount (PHP)</span>
+                  <input id="expense-amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+                </label>
+              </div>
+
+              <label class="field">
+                <span>Note</span>
+                <input id="expense-note" type="text" maxlength="100" placeholder="Optional note">
+              </label>
+
+              <p class="form-preview" id="expense-preview">Expenses will feed directly into your daily and monthly profit summaries.</p>
+
+              <button class="button primary" type="submit">Save Expense</button>
+            </form>
+
+            <div class="summary-chip-grid">
+              <article class="summary-chip">
+                <span>Expenses today</span>
+                <strong id="expense-today-total">PHP 0.00</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Expenses this month</span>
+                <strong id="expense-month-total">PHP 0.00</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Recent category</span>
+                <strong id="expense-last-category">No expenses yet</strong>
+              </article>
+            </div>
+
+            <div class="list-stack scroll-list" id="expense-recent-list"></div>
+          </div>
         </section>
 
         <section class="panel tabbed-panel" aria-labelledby="store-insights-title">
@@ -493,6 +599,12 @@
             </button>
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-performance">
               Performance
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-finance">
+              Finance
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-reports">
+              Reports
             </button>
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-activity">
               Activity
@@ -519,8 +631,89 @@
             </div>
           </div>
 
+          <div class="tab-panel" id="insight-finance" data-tab-panel="store-insights" hidden>
+            <p class="section-intro">Compare sales, expenses, profit, and receivables in one financial snapshot.</p>
+
+            <div class="report-grid compact-report-grid">
+              <article class="report-card">
+                <span class="report-label">Today</span>
+                <strong id="finance-today-profit">PHP 0.00</strong>
+                <div class="report-meta">
+                  <span id="finance-today-sales">Sales: PHP 0.00</span>
+                  <span id="finance-today-expenses">Expenses: PHP 0.00</span>
+                </div>
+              </article>
+
+              <article class="report-card">
+                <span class="report-label">This month</span>
+                <strong id="finance-month-profit">PHP 0.00</strong>
+                <div class="report-meta">
+                  <span id="finance-month-sales">Sales: PHP 0.00</span>
+                  <span id="finance-month-expenses">Expenses: PHP 0.00</span>
+                </div>
+              </article>
+
+              <article class="report-card">
+                <span class="report-label">Receivables</span>
+                <strong id="finance-outstanding-balance">PHP 0.00</strong>
+                <div class="report-meta">
+                  <span id="finance-active-debtors">0 active debtors</span>
+                  <span id="finance-expense-count">0 expense entries this month</span>
+                </div>
+              </article>
+            </div>
+
+            <div class="insight-split">
+              <div class="insight-section">
+                <h3>Expense category mix</h3>
+                <div class="bar-stack" id="expense-category-mix"></div>
+              </div>
+
+              <div class="insight-section">
+                <h3>Outstanding customer balances</h3>
+                <div class="list-stack" id="finance-debt-overview"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="insight-reports" data-tab-panel="store-insights" hidden>
+            <p class="section-intro">Review daily, weekly, and monthly operating summaries without leaving the dashboard.</p>
+
+            <div class="report-grid">
+              <article class="report-card">
+                <span class="report-label">Today</span>
+                <strong id="report-daily-profit">PHP 0.00</strong>
+                <div class="report-meta">
+                  <span id="report-daily-sales">Sales: PHP 0.00</span>
+                  <span id="report-daily-expenses">Expenses: PHP 0.00</span>
+                  <span id="report-daily-units">Units sold: 0</span>
+                </div>
+              </article>
+
+              <article class="report-card">
+                <span class="report-label">Last 7 days</span>
+                <strong id="report-weekly-profit">PHP 0.00</strong>
+                <div class="report-meta">
+                  <span id="report-weekly-sales">Sales: PHP 0.00</span>
+                  <span id="report-weekly-expenses">Expenses: PHP 0.00</span>
+                  <span id="report-weekly-units">Units sold: 0</span>
+                </div>
+              </article>
+
+              <article class="report-card">
+                <span class="report-label">This month</span>
+                <strong id="report-monthly-profit">PHP 0.00</strong>
+                <div class="report-meta">
+                  <span id="report-monthly-sales">Sales: PHP 0.00</span>
+                  <span id="report-monthly-expenses">Expenses: PHP 0.00</span>
+                  <span id="report-monthly-units">Units sold: 0</span>
+                </div>
+              </article>
+            </div>
+          </div>
+
           <div class="tab-panel" id="insight-activity" data-tab-panel="store-insights" hidden>
-            <p class="section-intro">Review the latest inventory movements and product changes.</p>
+            <p class="section-intro">Review the latest inventory movements, utang updates, and expense entries.</p>
             <div class="activity-list scroll-list" id="recent-activity"></div>
           </div>
         </section>

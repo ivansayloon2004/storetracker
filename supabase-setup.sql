@@ -55,6 +55,25 @@ create table if not exists public.transactions (
   occurred_at timestamptz not null default timezone('utc', now())
 );
 
+create table if not exists public.debts (
+  id text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  entry_type text not null check (entry_type in ('charge', 'payment')),
+  customer_name text not null,
+  amount numeric(12, 2) not null check (amount > 0),
+  note text not null default '',
+  occurred_at timestamptz not null default timezone('utc', now())
+);
+
+create table if not exists public.expenses (
+  id text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  category text not null,
+  amount numeric(12, 2) not null check (amount > 0),
+  note text not null default '',
+  occurred_at timestamptz not null default timezone('utc', now())
+);
+
 create table if not exists public.activity (
   id text primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -72,6 +91,10 @@ create unique index if not exists products_user_id_sku_unique
 create index if not exists products_user_id_idx on public.products (user_id);
 create index if not exists transactions_user_id_idx on public.transactions (user_id);
 create index if not exists transactions_occurred_at_idx on public.transactions (occurred_at desc);
+create index if not exists debts_user_id_idx on public.debts (user_id);
+create index if not exists debts_occurred_at_idx on public.debts (occurred_at desc);
+create index if not exists expenses_user_id_idx on public.expenses (user_id);
+create index if not exists expenses_occurred_at_idx on public.expenses (occurred_at desc);
 create index if not exists activity_user_id_idx on public.activity (user_id);
 create index if not exists activity_occurred_at_idx on public.activity (occurred_at desc);
 
@@ -162,6 +185,8 @@ execute function public.handle_new_user();
 alter table public.profiles enable row level security;
 alter table public.products enable row level security;
 alter table public.transactions enable row level security;
+alter table public.debts enable row level security;
+alter table public.expenses enable row level security;
 alter table public.activity enable row level security;
 
 drop policy if exists profiles_select_self_or_admin on public.profiles;
@@ -251,6 +276,64 @@ for delete
 to authenticated
 using ((select auth.uid()) = user_id or private.is_admin());
 
+drop policy if exists debts_select_self_or_admin on public.debts;
+create policy debts_select_self_or_admin
+on public.debts
+for select
+to authenticated
+using ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists debts_insert_self_or_admin on public.debts;
+create policy debts_insert_self_or_admin
+on public.debts
+for insert
+to authenticated
+with check ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists debts_update_self_or_admin on public.debts;
+create policy debts_update_self_or_admin
+on public.debts
+for update
+to authenticated
+using ((select auth.uid()) = user_id or private.is_admin())
+with check ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists debts_delete_self_or_admin on public.debts;
+create policy debts_delete_self_or_admin
+on public.debts
+for delete
+to authenticated
+using ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists expenses_select_self_or_admin on public.expenses;
+create policy expenses_select_self_or_admin
+on public.expenses
+for select
+to authenticated
+using ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists expenses_insert_self_or_admin on public.expenses;
+create policy expenses_insert_self_or_admin
+on public.expenses
+for insert
+to authenticated
+with check ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists expenses_update_self_or_admin on public.expenses;
+create policy expenses_update_self_or_admin
+on public.expenses
+for update
+to authenticated
+using ((select auth.uid()) = user_id or private.is_admin())
+with check ((select auth.uid()) = user_id or private.is_admin());
+
+drop policy if exists expenses_delete_self_or_admin on public.expenses;
+create policy expenses_delete_self_or_admin
+on public.expenses
+for delete
+to authenticated
+using ((select auth.uid()) = user_id or private.is_admin());
+
 drop policy if exists activity_select_self_or_admin on public.activity;
 create policy activity_select_self_or_admin
 on public.activity
@@ -284,6 +367,8 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.profiles to authenticated;
 grant select, insert, update, delete on public.products to authenticated;
 grant select, insert, update, delete on public.transactions to authenticated;
+grant select, insert, update, delete on public.debts to authenticated;
+grant select, insert, update, delete on public.expenses to authenticated;
 grant select, insert, update, delete on public.activity to authenticated;
 
 -- After creating an administrator account, promote it with:

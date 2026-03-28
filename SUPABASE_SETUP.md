@@ -8,6 +8,12 @@
 6. If you switch to a different Supabase project later, replace those values with the new project details.
 7. Push the updated files to GitHub so Render redeploys the site.
 
+If you already ran the SQL once before and then add new features later:
+
+1. Open the SQL Editor again.
+2. Run the latest `supabase-setup.sql` file one more time.
+3. This safely adds any new tables or policies that were introduced, such as shared utang and expense tracking.
+
 Example:
 
 ```js

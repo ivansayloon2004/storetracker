@@ -41,6 +41,10 @@ let currentAdmin = cloudMode ? null : resolveCurrentAdmin();
 let currentAccount = cloudMode ? null : resolveCurrentAccount();
 let state = !cloudMode && currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
 let remoteStoreMap = {};
+const cloudTableStatus = {
+  debts: null,
+  expenses: null,
+};
 const filters = {
   search: "",
   category: "all",
@@ -142,9 +146,51 @@ const elements = {
   restockQuantity: document.querySelector("#restock-quantity"),
   restockNote: document.querySelector("#restock-note"),
   restockPreview: document.querySelector("#restock-preview"),
+  debtForm: document.querySelector("#debt-form"),
+  debtCustomerName: document.querySelector("#debt-customer-name"),
+  debtType: document.querySelector("#debt-type"),
+  debtAmount: document.querySelector("#debt-amount"),
+  debtNote: document.querySelector("#debt-note"),
+  debtPreview: document.querySelector("#debt-preview"),
+  debtTotalBalance: document.querySelector("#debt-total-balance"),
+  debtActiveCustomers: document.querySelector("#debt-active-customers"),
+  debtLastPayment: document.querySelector("#debt-last-payment"),
+  debtCustomerList: document.querySelector("#debt-customer-list"),
+  expenseForm: document.querySelector("#expense-form"),
+  expenseCategory: document.querySelector("#expense-category"),
+  expenseAmount: document.querySelector("#expense-amount"),
+  expenseNote: document.querySelector("#expense-note"),
+  expensePreview: document.querySelector("#expense-preview"),
+  expenseTodayTotal: document.querySelector("#expense-today-total"),
+  expenseMonthTotal: document.querySelector("#expense-month-total"),
+  expenseLastCategory: document.querySelector("#expense-last-category"),
+  expenseRecentList: document.querySelector("#expense-recent-list"),
   reorderBoard: document.querySelector("#reorder-board"),
   hotSellers: document.querySelector("#hot-sellers"),
   categoryMix: document.querySelector("#category-mix"),
+  financeTodayProfit: document.querySelector("#finance-today-profit"),
+  financeTodaySales: document.querySelector("#finance-today-sales"),
+  financeTodayExpenses: document.querySelector("#finance-today-expenses"),
+  financeMonthProfit: document.querySelector("#finance-month-profit"),
+  financeMonthSales: document.querySelector("#finance-month-sales"),
+  financeMonthExpenses: document.querySelector("#finance-month-expenses"),
+  financeOutstandingBalance: document.querySelector("#finance-outstanding-balance"),
+  financeActiveDebtors: document.querySelector("#finance-active-debtors"),
+  financeExpenseCount: document.querySelector("#finance-expense-count"),
+  expenseCategoryMix: document.querySelector("#expense-category-mix"),
+  financeDebtOverview: document.querySelector("#finance-debt-overview"),
+  reportDailyProfit: document.querySelector("#report-daily-profit"),
+  reportDailySales: document.querySelector("#report-daily-sales"),
+  reportDailyExpenses: document.querySelector("#report-daily-expenses"),
+  reportDailyUnits: document.querySelector("#report-daily-units"),
+  reportWeeklyProfit: document.querySelector("#report-weekly-profit"),
+  reportWeeklySales: document.querySelector("#report-weekly-sales"),
+  reportWeeklyExpenses: document.querySelector("#report-weekly-expenses"),
+  reportWeeklyUnits: document.querySelector("#report-weekly-units"),
+  reportMonthlyProfit: document.querySelector("#report-monthly-profit"),
+  reportMonthlySales: document.querySelector("#report-monthly-sales"),
+  reportMonthlyExpenses: document.querySelector("#report-monthly-expenses"),
+  reportMonthlyUnits: document.querySelector("#report-monthly-units"),
   recentActivity: document.querySelector("#recent-activity"),
   exportData: document.querySelector("#export-data"),
   importTrigger: document.querySelector("#import-trigger"),
@@ -272,6 +318,8 @@ function setupEventListeners() {
   elements.scannerManualForm.addEventListener("submit", handleScannerManualSubmit);
   elements.saleForm.addEventListener("submit", handleSaleSubmit);
   elements.restockForm.addEventListener("submit", handleRestockSubmit);
+  elements.debtForm.addEventListener("submit", handleDebtSubmit);
+  elements.expenseForm.addEventListener("submit", handleExpenseSubmit);
   elements.saleProduct.addEventListener("change", updateSalePreview);
   elements.saleQuantity.addEventListener("input", updateSalePreview);
   elements.restockProduct.addEventListener("change", updateRestockPreview);
@@ -511,7 +559,7 @@ async function ensureCloudProfile(user) {
 }
 
 async function loadCloudStateForUser(userId, storeName) {
-  const [productsResult, transactionsResult, activityResult] = await Promise.all([
+  const [productsResult, transactionsResult, activityResult, debtsResult, expensesResult] = await Promise.all([
     supabaseClient
       .from("products")
       .select("id, user_id, sku, name, category, unit, price, stock, reorder_level, updated_at, created_at")
@@ -529,6 +577,18 @@ async function loadCloudStateForUser(userId, storeName) {
       .eq("user_id", userId)
       .order("occurred_at", { ascending: false })
       .limit(80),
+    supabaseClient
+      .from("debts")
+      .select("id, user_id, entry_type, customer_name, amount, note, occurred_at")
+      .eq("user_id", userId)
+      .order("occurred_at", { ascending: false })
+      .limit(180),
+    supabaseClient
+      .from("expenses")
+      .select("id, user_id, category, amount, note, occurred_at")
+      .eq("user_id", userId)
+      .order("occurred_at", { ascending: false })
+      .limit(180),
   ]);
 
   if (productsResult.error || transactionsResult.error || activityResult.error) {
@@ -541,19 +601,32 @@ async function loadCloudStateForUser(userId, storeName) {
     return null;
   }
 
+  const debtRows = resolveOptionalCloudRows(debtsResult, "debts", "debt records");
+  const expenseRows = resolveOptionalCloudRows(expensesResult, "expenses", "expense records");
+  if (debtRows === null || expenseRows === null) {
+    return null;
+  }
+
   const normalized = normalizeState({
     products: (productsResult.data || []).map(mapDatabaseProduct),
     transactions: (transactionsResult.data || []).map(mapDatabaseTransaction),
+    debts: debtRows.map(mapDatabaseDebtEntry),
+    expenses: expenseRows.map(mapDatabaseExpense),
     activity: (activityResult.data || []).map(mapDatabaseActivity),
   });
 
-  return normalized.activity.length || normalized.products.length || normalized.transactions.length
+  return normalized.activity.length ||
+    normalized.products.length ||
+    normalized.transactions.length ||
+    normalized.debts.length ||
+    normalized.expenses.length
     ? normalized
     : buildFreshStoreState(storeName);
 }
 
 async function loadCloudAdminWorkspace() {
-  const [profilesResult, productsResult, transactionsResult, activityResult] = await Promise.all([
+  const [profilesResult, productsResult, transactionsResult, activityResult, debtsResult, expensesResult] =
+    await Promise.all([
     supabaseClient
       .from("profiles")
       .select("user_id, role, store_name, owner_name, email, created_at, updated_at, last_login_at")
@@ -572,6 +645,16 @@ async function loadCloudAdminWorkspace() {
       .select("id, user_id, kind, message, product_id, product_name, occurred_at")
       .order("occurred_at", { ascending: false })
       .limit(2000),
+    supabaseClient
+      .from("debts")
+      .select("id, user_id, entry_type, customer_name, amount, note, occurred_at")
+      .order("occurred_at", { ascending: false })
+      .limit(2000),
+    supabaseClient
+      .from("expenses")
+      .select("id, user_id, category, amount, note, occurred_at")
+      .order("occurred_at", { ascending: false })
+      .limit(2000),
   ]);
 
   if (profilesResult.error || productsResult.error || transactionsResult.error || activityResult.error) {
@@ -584,6 +667,15 @@ async function loadCloudAdminWorkspace() {
     accounts = [];
     remoteStoreMap = {};
     setAdminFeedback("Unable to load the shared workspace right now.", "danger");
+    return;
+  }
+
+  const debtRows = resolveOptionalCloudRows(debtsResult, "debts", "admin debt records");
+  const expenseRows = resolveOptionalCloudRows(expensesResult, "expenses", "admin expense records");
+  if (debtRows === null || expenseRows === null) {
+    accounts = [];
+    remoteStoreMap = {};
+    setAdminFeedback("Unable to load the shared finance records right now.", "danger");
     return;
   }
 
@@ -612,9 +704,41 @@ async function loadCloudAdminWorkspace() {
     remoteStoreMap[userId].activity.push(mapDatabaseActivity(row));
   });
 
+  debtRows.forEach((row) => {
+    const userId = `${row.user_id}`;
+    remoteStoreMap[userId] = remoteStoreMap[userId] || buildEmptyState();
+    remoteStoreMap[userId].debts.push(mapDatabaseDebtEntry(row));
+  });
+
+  expenseRows.forEach((row) => {
+    const userId = `${row.user_id}`;
+    remoteStoreMap[userId] = remoteStoreMap[userId] || buildEmptyState();
+    remoteStoreMap[userId].expenses.push(mapDatabaseExpense(row));
+  });
+
   Object.keys(remoteStoreMap).forEach((userId) => {
     remoteStoreMap[userId] = normalizeState(remoteStoreMap[userId]);
   });
+}
+
+function isMissingTableError(error) {
+  const message = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+  return error?.code === "42P01" || message.includes("does not exist");
+}
+
+function resolveOptionalCloudRows(result, statusKey, contextLabel) {
+  if (!result?.error) {
+    cloudTableStatus[statusKey] = true;
+    return result.data || [];
+  }
+
+  if (isMissingTableError(result.error)) {
+    cloudTableStatus[statusKey] = false;
+    return [];
+  }
+
+  console.error(`Unable to load shared ${contextLabel}.`, result.error);
+  return null;
 }
 
 function mapDatabaseProduct(row) {
@@ -641,6 +765,27 @@ function mapDatabaseTransaction(row) {
     unit: row.unit,
     unitPrice: roundMoney(row.unit_price),
     total: roundMoney(row.total),
+    note: `${row.note || ""}`.trim(),
+    occurredAt: normalizeDate(row.occurred_at),
+  };
+}
+
+function mapDatabaseDebtEntry(row) {
+  return {
+    id: row.id,
+    type: row.entry_type === "payment" ? "payment" : "charge",
+    customerName: row.customer_name,
+    amount: roundMoney(row.amount),
+    note: `${row.note || ""}`.trim(),
+    occurredAt: normalizeDate(row.occurred_at),
+  };
+}
+
+function mapDatabaseExpense(row) {
+  return {
+    id: row.id,
+    category: row.category,
+    amount: roundMoney(row.amount),
     note: `${row.note || ""}`.trim(),
     occurredAt: normalizeDate(row.occurred_at),
   };
@@ -896,6 +1041,8 @@ function buildEmptyState() {
   return {
     products: [],
     transactions: [],
+    debts: [],
+    expenses: [],
     activity: [],
   };
 }
@@ -904,6 +1051,8 @@ function buildFreshStoreState(storeName) {
   return {
     products: [],
     transactions: [],
+    debts: [],
+    expenses: [],
     activity: [
       buildActivity(
         "snapshot",
@@ -1004,16 +1153,32 @@ function buildDefaultState() {
     buildTransaction("restock", products[1], 24, "Added noodle packs", 14 * 60),
   ];
 
+  const debts = [
+    buildDebtEntry("charge", "Mang Jose", 145, "Rice and canned goods", 210),
+    buildDebtEntry("payment", "Mang Jose", 60, "Partial payment", 55),
+    buildDebtEntry("charge", "Aling Rosa", 90, "Neighborhood delivery", 95),
+  ];
+
+  const expenses = [
+    buildExpense("Electricity", 520, "Weekly power allocation", 980),
+    buildExpense("Delivery", 140, "Supplier pickup fare", 320),
+    buildExpense("Packaging", 85, "Small plastic bags and tape", 150),
+  ];
+
   const activity = [
     buildActivity("snapshot", "Demonstration inventory dataset prepared for review.", null, 5),
     buildActivity("sale", "Logged sale for 6 sachet of 3-in-1 Coffee Mix.", products[3], 135),
     buildActivity("sale", "Logged sale for 12 piece of Fresh Eggs.", products[6], 75),
     buildActivity("restock", "Restocked 20 sachet of Shampoo Sachet.", products[4], 26 * 60),
+    buildActivity("utang-payment", "Recorded payment of PHP 60.00 from Mang Jose.", null, 55),
+    buildActivity("expense", "Saved delivery expense worth PHP 140.00.", null, 320),
   ];
 
   return {
     products,
     transactions,
+    debts,
+    expenses,
     activity,
   };
 }
@@ -1058,6 +1223,27 @@ function buildActivity(kind, message, product, minutesAgo) {
   };
 }
 
+function buildDebtEntry(type, customerName, amount, note, minutesAgo) {
+  return {
+    id: uid("debt"),
+    type: type === "payment" ? "payment" : "charge",
+    customerName: `${customerName || ""}`.trim(),
+    amount: roundMoney(amount),
+    note: `${note || ""}`.trim(),
+    occurredAt: minutesAgoToIso(minutesAgo || 0),
+  };
+}
+
+function buildExpense(category, amount, note, minutesAgo) {
+  return {
+    id: uid("expense"),
+    category: `${category || "General"}`.trim() || "General",
+    amount: roundMoney(amount),
+    note: `${note || ""}`.trim(),
+    occurredAt: minutesAgoToIso(minutesAgo || 0),
+  };
+}
+
 function minutesAgoToIso(minutesAgo) {
   return new Date(Date.now() - minutesAgo * 60 * 1000).toISOString();
 }
@@ -1069,6 +1255,12 @@ function normalizeState(input) {
       : [],
     transactions: Array.isArray(input?.transactions)
       ? input.transactions.map(normalizeTransaction).filter(Boolean)
+      : [],
+    debts: Array.isArray(input?.debts)
+      ? input.debts.map(normalizeDebtEntry).filter(Boolean)
+      : [],
+    expenses: Array.isArray(input?.expenses)
+      ? input.expenses.map(normalizeExpense).filter(Boolean)
       : [],
     activity: Array.isArray(input?.activity)
       ? input.activity.map(normalizeActivity).filter(Boolean)
@@ -1117,6 +1309,45 @@ function normalizeTransaction(transaction) {
     total: roundMoney(transaction.total),
     note: `${transaction.note || ""}`.trim(),
     occurredAt: normalizeDate(transaction.occurredAt),
+  };
+}
+
+function normalizeDebtEntry(entry) {
+  if (!entry || typeof entry.customerName !== "string" || !entry.customerName.trim()) {
+    return null;
+  }
+
+  const amount = roundMoney(entry.amount);
+  if (amount <= 0) {
+    return null;
+  }
+
+  return {
+    id: `${entry.id || uid("debt")}`,
+    type: entry.type === "payment" ? "payment" : "charge",
+    customerName: entry.customerName.trim(),
+    amount,
+    note: `${entry.note || ""}`.trim(),
+    occurredAt: normalizeDate(entry.occurredAt),
+  };
+}
+
+function normalizeExpense(expense) {
+  if (!expense || typeof expense.category !== "string" || !expense.category.trim()) {
+    return null;
+  }
+
+  const amount = roundMoney(expense.amount);
+  if (amount <= 0) {
+    return null;
+  }
+
+  return {
+    id: `${expense.id || uid("expense")}`,
+    category: expense.category.trim(),
+    amount,
+    note: `${expense.note || ""}`.trim(),
+    occurredAt: normalizeDate(expense.occurredAt),
   };
 }
 
@@ -1537,6 +1768,8 @@ function resetAppForms() {
   resetProductForm();
   elements.saleForm.reset();
   elements.restockForm.reset();
+  elements.debtForm.reset();
+  elements.expenseForm.reset();
   updateSalePreview();
   updateRestockPreview();
 }
@@ -1556,6 +1789,10 @@ function renderAll() {
   renderReorderBoard();
   renderHotSellers();
   renderCategoryMix();
+  renderDebtPanel();
+  renderExpensePanel();
+  renderFinanceInsights();
+  renderReportInsights();
   renderRecentActivity();
   updateSalePreview();
   updateRestockPreview();
@@ -1578,7 +1815,7 @@ function renderAdminDashboard() {
 function renderAccountProfile() {
   elements.storeHeading.textContent = currentAccount.storeName;
   elements.storeSubtitle.textContent =
-    `${currentAccount.ownerName} can manage products, sales records, and restock entries from one structured workspace.`;
+    `${currentAccount.ownerName} can manage products, sales records, restock entries, utang balances, and expenses from one structured workspace.`;
   elements.accountBadge.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
   elements.sessionNote.textContent = cloudMode
     ? "This store account is synced through the shared cloud workspace."
@@ -1644,6 +1881,23 @@ async function persistCloudState(userId, storeState) {
     note: `${transaction.note || ""}`.trim(),
     occurred_at: normalizeDate(transaction.occurredAt),
   }));
+  const debtsPayload = normalizedState.debts.map((entry) => ({
+    id: entry.id,
+    user_id: userId,
+    entry_type: entry.type,
+    customer_name: entry.customerName,
+    amount: roundMoney(entry.amount),
+    note: `${entry.note || ""}`.trim(),
+    occurred_at: normalizeDate(entry.occurredAt),
+  }));
+  const expensesPayload = normalizedState.expenses.map((expense) => ({
+    id: expense.id,
+    user_id: userId,
+    category: expense.category,
+    amount: roundMoney(expense.amount),
+    note: `${expense.note || ""}`.trim(),
+    occurred_at: normalizeDate(expense.occurredAt),
+  }));
   const activityPayload = normalizedState.activity.map((activity) => ({
     id: activity.id,
     user_id: userId,
@@ -1653,6 +1907,16 @@ async function persistCloudState(userId, storeState) {
     product_name: activity.productName || "",
     occurred_at: normalizeDate(activity.occurredAt),
   }));
+
+  const debtWrite = await syncOptionalCloudTable("debts", "debts", userId, debtsPayload);
+  if (!debtWrite) {
+    return false;
+  }
+
+  const expenseWrite = await syncOptionalCloudTable("expenses", "expenses", userId, expensesPayload);
+  if (!expenseWrite) {
+    return false;
+  }
 
   const [deleteProducts, deleteTransactions, deleteActivity] = await Promise.all([
     supabaseClient.from("products").delete().eq("user_id", userId),
@@ -1688,6 +1952,45 @@ async function persistCloudState(userId, storeState) {
   const failed = results.find((result) => result.error);
   if (failed) {
     console.error("Unable to write cloud store data.", failed.error);
+    return false;
+  }
+
+  return true;
+}
+
+async function syncOptionalCloudTable(tableName, statusKey, userId, rows) {
+  if (cloudTableStatus[statusKey] === false && !rows.length) {
+    return true;
+  }
+
+  if (cloudTableStatus[statusKey] === false && rows.length) {
+    return false;
+  }
+
+  const deleteResult = await supabaseClient.from(tableName).delete().eq("user_id", userId);
+  if (deleteResult.error) {
+    if (isMissingTableError(deleteResult.error)) {
+      cloudTableStatus[statusKey] = false;
+      return false;
+    }
+
+    console.error(`Unable to clear shared ${tableName} rows before save.`, deleteResult.error);
+    return false;
+  }
+
+  cloudTableStatus[statusKey] = true;
+  if (!rows.length) {
+    return true;
+  }
+
+  const insertResult = await supabaseClient.from(tableName).insert(rows);
+  if (insertResult.error) {
+    if (isMissingTableError(insertResult.error)) {
+      cloudTableStatus[statusKey] = false;
+      return false;
+    }
+
+    console.error(`Unable to write shared ${tableName} rows.`, insertResult.error);
     return false;
   }
 
@@ -2131,6 +2434,184 @@ function renderCategoryMix() {
     .join("");
 }
 
+function renderDebtPanel() {
+  const debtSummaries = getDebtCustomerSummaries();
+  const latestPayment = [...state.debts]
+    .filter((entry) => entry.type === "payment")
+    .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt))[0];
+  const totalReceivables = sum(debtSummaries.filter((summary) => summary.balance > 0).map((summary) => summary.balance));
+
+  elements.debtTotalBalance.textContent = currencyFormatter.format(totalReceivables);
+  elements.debtActiveCustomers.textContent = numberFormatter.format(
+    debtSummaries.filter((summary) => summary.balance > 0).length
+  );
+  elements.debtLastPayment.textContent = latestPayment
+    ? `${latestPayment.customerName} · ${currencyFormatter.format(latestPayment.amount)}`
+    : "No payments yet";
+  elements.debtPreview.textContent = totalReceivables
+    ? `Outstanding receivables currently total ${currencyFormatter.format(totalReceivables)}.`
+    : "No active utang balances yet. Record a charge to begin tracking customer credit.";
+
+  if (!debtSummaries.length) {
+    elements.debtCustomerList.innerHTML = `
+      <div class="empty-state">
+        Customer balances will appear here once you record utang or payment entries.
+      </div>
+    `;
+    return;
+  }
+
+  elements.debtCustomerList.innerHTML = debtSummaries
+    .slice(0, 8)
+    .map(
+      (summary) => `
+        <article class="list-card">
+          <strong>${escapeHtml(summary.customerName)}</strong>
+          <div class="list-meta">
+            <span>Outstanding: ${currencyFormatter.format(summary.balance)}</span>
+            <span>Last entry: ${dateTimeFormatter.format(new Date(summary.lastOccurredAt))}</span>
+          </div>
+          <div class="list-meta">
+            <span>Charged: ${currencyFormatter.format(summary.charged)}</span>
+            <span>Paid: ${currencyFormatter.format(summary.paid)}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderExpensePanel() {
+  const todaySummary = getFinancialSummary(isToday);
+  const monthSummary = getFinancialSummary(isThisMonth);
+  const recentExpenses = [...state.expenses].sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+
+  elements.expenseTodayTotal.textContent = currencyFormatter.format(todaySummary.expenses);
+  elements.expenseMonthTotal.textContent = currencyFormatter.format(monthSummary.expenses);
+  elements.expenseLastCategory.textContent = recentExpenses[0]
+    ? `${recentExpenses[0].category} · ${currencyFormatter.format(recentExpenses[0].amount)}`
+    : "No expenses yet";
+  elements.expensePreview.textContent = monthSummary.expenseCount
+    ? `${monthSummary.expenseCount} expense entr${monthSummary.expenseCount === 1 ? "y" : "ies"} recorded this month.`
+    : "Expenses will feed directly into your daily and monthly profit summaries.";
+
+  if (!recentExpenses.length) {
+    elements.expenseRecentList.innerHTML = `
+      <div class="empty-state">
+        Expense entries will appear here once you begin recording store costs.
+      </div>
+    `;
+    return;
+  }
+
+  elements.expenseRecentList.innerHTML = recentExpenses
+    .slice(0, 8)
+    .map(
+      (expense) => `
+        <article class="list-card">
+          <strong>${escapeHtml(expense.category)}</strong>
+          <div class="list-meta">
+            <span>${currencyFormatter.format(expense.amount)}</span>
+            <span>${dateTimeFormatter.format(new Date(expense.occurredAt))}</span>
+          </div>
+          <div class="list-meta">
+            <span>${escapeHtml(expense.note || "No note recorded")}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderFinanceInsights() {
+  const todaySummary = getFinancialSummary(isToday);
+  const monthSummary = getFinancialSummary(isThisMonth);
+  const debtSummaries = getDebtCustomerSummaries().filter((summary) => summary.balance > 0);
+  const expenseCategories = getExpenseCategorySummaries();
+
+  elements.financeTodayProfit.textContent = currencyFormatter.format(todaySummary.profit);
+  elements.financeTodaySales.textContent = `Sales: ${currencyFormatter.format(todaySummary.sales)}`;
+  elements.financeTodayExpenses.textContent = `Expenses: ${currencyFormatter.format(todaySummary.expenses)}`;
+  elements.financeMonthProfit.textContent = currencyFormatter.format(monthSummary.profit);
+  elements.financeMonthSales.textContent = `Sales: ${currencyFormatter.format(monthSummary.sales)}`;
+  elements.financeMonthExpenses.textContent = `Expenses: ${currencyFormatter.format(monthSummary.expenses)}`;
+  elements.financeOutstandingBalance.textContent = currencyFormatter.format(
+    sum(debtSummaries.map((summary) => summary.balance))
+  );
+  elements.financeActiveDebtors.textContent = `${debtSummaries.length} active debtor${debtSummaries.length === 1 ? "" : "s"}`;
+  elements.financeExpenseCount.textContent = `${monthSummary.expenseCount} expense entr${
+    monthSummary.expenseCount === 1 ? "y" : "ies"
+  } this month`;
+
+  if (!expenseCategories.length) {
+    elements.expenseCategoryMix.innerHTML = `
+      <div class="empty-state">
+        Expense categories will appear here once costs are recorded.
+      </div>
+    `;
+  } else {
+    const highestValue = expenseCategories[0].value || 1;
+    elements.expenseCategoryMix.innerHTML = expenseCategories
+      .map(
+        (category) => `
+          <div class="bar-row">
+            <div class="bar-header">
+              <span>${escapeHtml(category.name)}</span>
+              <span>${currencyFormatter.format(category.value)}</span>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: ${(category.value / highestValue) * 100}%"></div>
+            </div>
+          </div>
+        `
+      )
+      .join("");
+  }
+
+  if (!debtSummaries.length) {
+    elements.financeDebtOverview.innerHTML = `
+      <div class="empty-state">
+        Active customer balances will appear here once utang entries are recorded.
+      </div>
+    `;
+    return;
+  }
+
+  elements.financeDebtOverview.innerHTML = debtSummaries
+    .slice(0, 5)
+    .map(
+      (summary) => `
+        <article class="list-card">
+          <strong>${escapeHtml(summary.customerName)}</strong>
+          <div class="list-meta">
+            <span>Outstanding: ${currencyFormatter.format(summary.balance)}</span>
+            <span>Last update: ${dateTimeFormatter.format(new Date(summary.lastOccurredAt))}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderReportInsights() {
+  const daily = getFinancialSummary(isToday);
+  const weekly = getFinancialSummary((isoDate) => isWithinLastDays(isoDate, 7));
+  const monthly = getFinancialSummary(isThisMonth);
+
+  elements.reportDailyProfit.textContent = currencyFormatter.format(daily.profit);
+  elements.reportDailySales.textContent = `Sales: ${currencyFormatter.format(daily.sales)}`;
+  elements.reportDailyExpenses.textContent = `Expenses: ${currencyFormatter.format(daily.expenses)}`;
+  elements.reportDailyUnits.textContent = `Units sold: ${formatQuantity(daily.unitsSold)}`;
+  elements.reportWeeklyProfit.textContent = currencyFormatter.format(weekly.profit);
+  elements.reportWeeklySales.textContent = `Sales: ${currencyFormatter.format(weekly.sales)}`;
+  elements.reportWeeklyExpenses.textContent = `Expenses: ${currencyFormatter.format(weekly.expenses)}`;
+  elements.reportWeeklyUnits.textContent = `Units sold: ${formatQuantity(weekly.unitsSold)}`;
+  elements.reportMonthlyProfit.textContent = currencyFormatter.format(monthly.profit);
+  elements.reportMonthlySales.textContent = `Sales: ${currencyFormatter.format(monthly.sales)}`;
+  elements.reportMonthlyExpenses.textContent = `Expenses: ${currencyFormatter.format(monthly.expenses)}`;
+  elements.reportMonthlyUnits.textContent = `Units sold: ${formatQuantity(monthly.unitsSold)}`;
+}
+
 function renderRecentActivity() {
   const activities = [...state.activity].sort(
     (left, right) => new Date(right.occurredAt) - new Date(left.occurredAt)
@@ -2139,7 +2620,7 @@ function renderRecentActivity() {
   if (!activities.length) {
     elements.recentActivity.innerHTML = `
       <div class="empty-state">
-        Your latest sales, restocks, and product changes will show up here.
+        Your latest sales, restocks, utang updates, and expense entries will show up here.
       </div>
     `;
     return;
@@ -2309,6 +2790,113 @@ async function handleRestockSubmit(event) {
     elements.restockForm.reset();
     updateRestockPreview();
   }
+}
+
+async function handleDebtSubmit(event) {
+  event.preventDefault();
+
+  const customerName = elements.debtCustomerName.value.trim();
+  const type = elements.debtType.value === "payment" ? "payment" : "charge";
+  const amount = roundMoney(elements.debtAmount.value);
+  const note = elements.debtNote.value.trim();
+
+  if (!customerName) {
+    setFeedback("Enter the customer name before saving a utang entry.", "danger");
+    return;
+  }
+
+  if (amount <= 0) {
+    setFeedback("Utang and payment amounts must be greater than zero.", "danger");
+    return;
+  }
+
+  const previousState = normalizeState(state);
+  state.debts.unshift({
+    id: uid("debt"),
+    type,
+    customerName,
+    amount,
+    note,
+    occurredAt: new Date().toISOString(),
+  });
+  state.debts = state.debts.slice(0, 180);
+
+  addActivity(
+    type === "payment" ? "utang-payment" : "utang-charge",
+    type === "payment"
+      ? `Recorded payment of ${currencyFormatter.format(amount)} from ${customerName}.`
+      : `Added utang of ${currencyFormatter.format(amount)} for ${customerName}.`,
+    null
+  );
+
+  const saved = await saveState();
+  if (!saved) {
+    state = previousState;
+    renderAll();
+    setFeedback(
+      cloudMode
+        ? "The utang entry could not be synchronized. Run the updated Supabase SQL before using this feature online."
+        : "The utang entry could not be saved right now.",
+      "danger"
+    );
+    return;
+  }
+
+  renderAll();
+  elements.debtForm.reset();
+  setFeedback(
+    type === "payment"
+      ? `${customerName}'s payment was recorded successfully.`
+      : `${customerName}'s utang entry was recorded successfully.`,
+    "success"
+  );
+}
+
+async function handleExpenseSubmit(event) {
+  event.preventDefault();
+
+  const category = elements.expenseCategory.value.trim();
+  const amount = roundMoney(elements.expenseAmount.value);
+  const note = elements.expenseNote.value.trim();
+
+  if (!category) {
+    setFeedback("Enter an expense category before saving.", "danger");
+    return;
+  }
+
+  if (amount <= 0) {
+    setFeedback("Expense amount must be greater than zero.", "danger");
+    return;
+  }
+
+  const previousState = normalizeState(state);
+  state.expenses.unshift({
+    id: uid("expense"),
+    category,
+    amount,
+    note,
+    occurredAt: new Date().toISOString(),
+  });
+  state.expenses = state.expenses.slice(0, 180);
+
+  addActivity("expense", `Saved ${category} expense worth ${currencyFormatter.format(amount)}.`, null);
+
+  const saved = await saveState();
+  if (!saved) {
+    state = previousState;
+    renderAll();
+    setFeedback(
+      cloudMode
+        ? "The expense entry could not be synchronized. Run the updated Supabase SQL before using this feature online."
+        : "The expense entry could not be saved right now.",
+      "danger"
+    );
+    return;
+  }
+
+  renderAll();
+  elements.expenseForm.reset();
+  setFeedback(`${category} expense saved successfully.`, "success");
 }
 
 function handleInventoryActions(event) {
@@ -2713,11 +3301,21 @@ function importStateFromFile(event) {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
+      const previousState = normalizeState(state);
       const parsed = JSON.parse(`${reader.result || "{}"}`);
       state = normalizeState(parsed.state ?? parsed);
       addActivity("import", "Imported a backup file into the inventory workspace.", null);
       if (await saveAndRefresh("Backup imported successfully.", "success")) {
         resetProductForm();
+      } else {
+        state = previousState;
+        renderAll();
+        setFeedback(
+          cloudMode
+            ? "The backup needs the updated Supabase SQL before finance and utang records can be synchronized."
+            : "The backup could not be saved right now.",
+          "danger"
+        );
       }
     } catch (error) {
       console.error("Unable to import backup.", error);
@@ -2737,10 +3335,20 @@ async function resetToDemoState() {
     return;
   }
 
+  const previousState = normalizeState(state);
   state = buildDefaultState();
   addActivity("reset", "Loaded the demonstration inventory dataset.", null);
   if (await saveAndRefresh("Demonstration inventory loaded.", "warning")) {
     resetProductForm();
+  } else {
+    state = previousState;
+    renderAll();
+    setFeedback(
+      cloudMode
+        ? "The demonstration dataset needs the updated Supabase SQL before finance and utang records can be synchronized."
+        : "The demonstration dataset could not be saved right now.",
+      "danger"
+    );
   }
 }
 
@@ -2748,7 +3356,12 @@ async function saveAndRefresh(message, tone) {
   const saved = await saveState();
   renderAll();
   if (!saved) {
-    setFeedback("The change could not be synchronized to the shared workspace. Please try again.", "danger");
+    setFeedback(
+      cloudMode
+        ? "The change could not be synchronized to the shared workspace. Please try again."
+        : "The change could not be saved on this browser right now. Please try again.",
+      "danger"
+    );
     return false;
   }
 
@@ -2829,6 +3442,72 @@ function getCategorySummaries() {
   return [...totals.entries()]
     .map(([name, value]) => ({ name, value: roundMoney(value) }))
     .sort((left, right) => right.value - left.value);
+}
+
+function getDebtCustomerSummaries() {
+  const summaries = new Map();
+
+  state.debts.forEach((entry) => {
+    const key = entry.customerName.trim().toLowerCase();
+    const current = summaries.get(key) || {
+      customerName: entry.customerName.trim(),
+      charged: 0,
+      paid: 0,
+      balance: 0,
+      lastOccurredAt: entry.occurredAt,
+    };
+
+    if (entry.type === "payment") {
+      current.paid += entry.amount;
+      current.balance -= entry.amount;
+    } else {
+      current.charged += entry.amount;
+      current.balance += entry.amount;
+    }
+
+    if (new Date(entry.occurredAt) > new Date(current.lastOccurredAt)) {
+      current.lastOccurredAt = entry.occurredAt;
+    }
+
+    summaries.set(key, current);
+  });
+
+  return [...summaries.values()]
+    .map((summary) => ({
+      ...summary,
+      charged: roundMoney(summary.charged),
+      paid: roundMoney(summary.paid),
+      balance: roundMoney(Math.max(summary.balance, 0)),
+    }))
+    .sort((left, right) => right.balance - left.balance || new Date(right.lastOccurredAt) - new Date(left.lastOccurredAt));
+}
+
+function getExpenseCategorySummaries() {
+  const totals = new Map();
+
+  state.expenses.forEach((expense) => {
+    totals.set(expense.category, (totals.get(expense.category) || 0) + expense.amount);
+  });
+
+  return [...totals.entries()]
+    .map(([name, value]) => ({ name, value: roundMoney(value) }))
+    .sort((left, right) => right.value - left.value);
+}
+
+function getFinancialSummary(filterFn) {
+  const sales = state.transactions.filter((transaction) => transaction.type === "sale" && filterFn(transaction.occurredAt));
+  const expenses = state.expenses.filter((expense) => filterFn(expense.occurredAt));
+
+  return {
+    sales: sum(sales.map((transaction) => transaction.total)),
+    expenses: sum(expenses.map((expense) => expense.amount)),
+    profit: roundMoney(
+      sum(sales.map((transaction) => transaction.total)) - sum(expenses.map((expense) => expense.amount))
+    ),
+    unitsSold: sum(sales.map((transaction) => transaction.quantity)),
+    saleCount: sales.length,
+    expenseCount: expenses.length,
+  };
 }
 
 function getAdminStoreSummaries() {
@@ -2918,10 +3597,27 @@ function isToday(isoDate) {
   );
 }
 
+function isThisMonth(isoDate) {
+  const candidate = new Date(isoDate);
+  const today = new Date();
+  return candidate.getFullYear() === today.getFullYear() && candidate.getMonth() === today.getMonth();
+}
+
+function isWithinLastDays(isoDate, days) {
+  const candidate = new Date(isoDate);
+  const now = new Date();
+  const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  cutoff.setHours(0, 0, 0, 0);
+  return candidate >= cutoff && candidate <= now;
+}
+
 function formatActivityLabel(kind) {
   return {
     sale: "Sale",
     restock: "Restock",
+    expense: "Expense",
+    "utang-charge": "Utang added",
+    "utang-payment": "Utang payment",
     "product-created": "New item",
     "product-updated": "Product edit",
     "product-deleted": "Removed item",
@@ -2958,7 +3654,7 @@ function setFeedback(message, tone = "default") {
   }
 
   feedbackTimer = window.setTimeout(() => {
-    elements.feedbackMessage.textContent = "The inventory workspace is ready.";
+    elements.feedbackMessage.textContent = "The store workspace is ready.";
     delete elements.feedbackMessage.dataset.tone;
   }, 4200);
 }
