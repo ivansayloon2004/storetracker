@@ -24,7 +24,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const CLOUD_SYNC_INTERVAL_MS = 8000;
-const APP_VERSION = "20260329h";
+const APP_VERSION = "20260329i";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -2585,7 +2585,7 @@ async function persistCloudState(userId, storeState) {
     cost_price: resolveCostPrice(product.costPrice, product.price),
     stock: roundNumber(product.stock),
     reorder_level: roundNumber(product.reorderLevel),
-    image_url: sanitizeImageUrl(product.imageUrl) || null,
+    image_url: sanitizeImageUrl(product.imageUrl),
     updated_at: normalizeDate(product.updatedAt),
   }));
   const transactionsPayload = normalizedState.transactions.map((transaction) => ({
@@ -2715,7 +2715,7 @@ async function syncOptionalCloudTable(tableName, statusKey, userId, rows) {
   if (deleteResult.error) {
     if (isMissingTableError(deleteResult.error)) {
       cloudTableStatus[statusKey] = false;
-      return false;
+      return !rows.length;
     }
 
     console.error(`Unable to clear shared ${tableName} rows before save.`, deleteResult.error);
@@ -3713,6 +3713,7 @@ async function handleProductSubmit(event) {
   event.preventDefault();
 
   const productId = elements.productId.value.trim();
+  const previousState = normalizeState(state);
   const existingProduct = productId ? getProductById(productId) : null;
   const product = {
     id: productId || uid("product"),
@@ -3755,12 +3756,18 @@ async function handleProductSubmit(event) {
     addActivity("product-updated", `Updated product details for ${product.name}.`, product);
     if (await saveAndRefresh(`${product.name} was updated.`, "success")) {
       resetProductForm();
+    } else {
+      state = previousState;
+      renderAll();
     }
   } else {
     state.products.unshift(product);
     addActivity("product-created", `Added ${product.name} to your product list.`, product);
     if (await saveAndRefresh(`${product.name} was added to inventory.`, "success")) {
       resetProductForm();
+    } else {
+      state = previousState;
+      renderAll();
     }
   }
 }
