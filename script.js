@@ -2997,7 +2997,7 @@ function renderAdminUsersTable() {
 
   if (!summaries.length) {
     elements.adminUsersBody.innerHTML = `
-      <tr>
+      <tr class="table-empty-row">
         <td colspan="8">
           <div class="empty-state">
             ${cloudMode
@@ -3012,25 +3012,25 @@ function renderAdminUsersTable() {
       .map((summary) => {
         const alertStatus = getAdminRiskStatus(summary);
         return `
-          <tr>
-            <td>
+          <tr class="admin-user-row">
+            <td data-label="Store">
               <div class="product-cell">
                 <span class="product-name">${escapeHtml(summary.storeName)}</span>
                 <span class="product-meta">${escapeHtml(summary.email)}</span>
               </div>
             </td>
-            <td>
+            <td data-label="Owner">
               <div class="product-cell">
                 <span>${escapeHtml(summary.ownerName)}</span>
                 <span class="product-meta">Created ${dateTimeFormatter.format(new Date(summary.createdAt))}</span>
               </div>
             </td>
-            <td>${numberFormatter.format(summary.productCount)}</td>
-            <td>${currencyFormatter.format(summary.stockValue)}</td>
-            <td>${currencyFormatter.format(summary.todaySales)}</td>
-            <td><span class="status-pill ${alertStatus.className}">${escapeHtml(alertStatus.label)}</span></td>
-            <td>${dateTimeFormatter.format(new Date(summary.lastLoginAt))}</td>
-            <td>${dateTimeFormatter.format(new Date(summary.lastActivityAt))}</td>
+            <td data-label="Products">${numberFormatter.format(summary.productCount)}</td>
+            <td data-label="Stock Value">${currencyFormatter.format(summary.stockValue)}</td>
+            <td data-label="Sales Today">${currencyFormatter.format(summary.todaySales)}</td>
+            <td data-label="Alerts"><span class="status-pill ${alertStatus.className}">${escapeHtml(alertStatus.label)}</span></td>
+            <td data-label="Last Login">${dateTimeFormatter.format(new Date(summary.lastLoginAt))}</td>
+            <td data-label="Last Activity">${dateTimeFormatter.format(new Date(summary.lastActivityAt))}</td>
           </tr>
         `;
       })
@@ -3194,7 +3194,7 @@ function renderInventory() {
 
   if (!products.length) {
     elements.inventoryBody.innerHTML = `
-      <tr>
+      <tr class="table-empty-row">
         <td colspan="7">
           <div class="empty-state">
             No products match your current search. Try another category or add a new item.
@@ -3208,8 +3208,8 @@ function renderInventory() {
         const status = getProductStatus(product);
         const suggestedRestock = getSuggestedRestockQuantity(product);
         return `
-          <tr>
-            <td>
+          <tr class="inventory-row">
+            <td data-label="Product">
               <div class="product-row-head">
                 ${renderProductPhoto(product, "small")}
                 <div class="product-cell">
@@ -3221,28 +3221,28 @@ function renderInventory() {
                 </div>
               </div>
             </td>
-            <td>
+            <td data-label="Category">
               <div class="product-cell">
                 <span>${escapeHtml(product.category)}</span>
                 <span class="product-meta">${escapeHtml(product.unit)}</span>
               </div>
             </td>
-            <td>
+            <td data-label="Price">
               <div class="product-cell">
                 <span>${currencyFormatter.format(product.price)}</span>
                 <span class="product-meta">Cost: ${currencyFormatter.format(product.costPrice)}</span>
                 <span class="product-meta">Margin: ${currencyFormatter.format(getProductMargin(product))}</span>
               </div>
             </td>
-            <td>
+            <td data-label="Stock">
               <div class="product-cell">
                 <span>${formatQuantity(product.stock)} ${escapeHtml(product.unit)}</span>
                 <span class="product-meta">Reorder at ${formatQuantity(product.reorderLevel)}</span>
               </div>
             </td>
-            <td><span class="status-pill ${status.key}">${status.label}</span></td>
-            <td>${dateTimeFormatter.format(new Date(product.updatedAt))}</td>
-            <td>
+            <td data-label="Status"><span class="status-pill ${status.key}">${status.label}</span></td>
+            <td data-label="Last Updated">${dateTimeFormatter.format(new Date(product.updatedAt))}</td>
+            <td data-label="Actions">
               <div class="mini-actions">
                 <button class="mini-button" type="button" data-action="edit" data-product-id="${escapeHtml(product.id)}">Edit</button>
                 <button class="mini-button warn" type="button" data-action="delete" data-product-id="${escapeHtml(product.id)}">Delete</button>
