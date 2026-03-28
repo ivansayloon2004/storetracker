@@ -269,11 +269,11 @@ if (cloudMode) {
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      void refreshCloudAccountState({ force: true });
+      void refreshCloudAccountState();
     }
   });
   window.addEventListener("focus", () => {
-    void refreshCloudAccountState({ force: true });
+    void refreshCloudAccountState();
   });
   startCloudSyncWatcher();
 }
