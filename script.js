@@ -3,6 +3,7 @@ const ACCOUNTS_KEY = "tindahan-tracker-accounts-v1";
 const SESSION_KEY = "tindahan-tracker-session-v1";
 const STORE_DATA_KEY = "tindahan-tracker-store-data-v1";
 const ADMIN_KEY = "tindahan-tracker-admin-v1";
+const RECOVERY_KEY = "tindahan-tracker-recovery-v1";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -62,6 +63,7 @@ let scanFrameId = 0;
 let scanLoopBusy = false;
 let lastScannedCode = "";
 let lastScannedAt = 0;
+let recoveryCandidate = null;
 
 const elements = {
   authShell: document.querySelector("#auth-shell"),
@@ -115,6 +117,9 @@ const elements = {
   storeOwnerDisplay: document.querySelector("#store-owner-display"),
   logoutButton: document.querySelector("#logout-button"),
   feedbackMessage: document.querySelector("#feedback-message"),
+  recoveryBanner: document.querySelector("#recovery-banner"),
+  recoveryBannerText: document.querySelector("#recovery-banner-text"),
+  recoveryAction: document.querySelector("#recovery-action"),
   totalSkus: document.querySelector("#total-skus"),
   totalUnitsFoot: document.querySelector("#total-units-foot"),
   inventoryValue: document.querySelector("#inventory-value"),
@@ -403,6 +408,9 @@ function setupEventListeners() {
   elements.importFile.addEventListener("change", importStateFromFile);
   elements.resetDemo.addEventListener("click", resetToDemoState);
   elements.logoutButton.addEventListener("click", logoutCurrentAccount);
+  elements.recoveryAction?.addEventListener("click", () => {
+    void handleRecoveryImport();
+  });
   elements.adminExportButton.addEventListener("click", exportAdminReport);
   elements.adminLogoutButton.addEventListener("click", logoutAdmin);
 }
@@ -959,6 +967,229 @@ function mapDatabaseActivity(row) {
     productName: `${row.product_name || ""}`,
     occurredAt: normalizeDate(row.occurred_at),
   };
+}
+
+function readBrowserStorageJson(key, fallbackValue) {
+  try {
+    const saved = localStorage.getItem(key);
+    if (!saved) {
+      return fallbackValue;
+    }
+
+    return JSON.parse(saved);
+  } catch (error) {
+    console.warn(`Unable to read browser storage for ${key}.`, error);
+    return fallbackValue;
+  }
+}
+
+function loadBrowserAccountsSnapshot() {
+  const parsed = readBrowserStorageJson(ACCOUNTS_KEY, []);
+  return Array.isArray(parsed) ? parsed.map(normalizeAccount).filter(Boolean) : [];
+}
+
+function loadBrowserStoreMapSnapshot() {
+  const parsed = readBrowserStorageJson(STORE_DATA_KEY, {});
+  return parsed && typeof parsed === "object" ? parsed : {};
+}
+
+function readLegacyStateSnapshot() {
+  const parsed = readBrowserStorageJson(LEGACY_STORAGE_KEY, null);
+  return parsed ? normalizeState(parsed) : null;
+}
+
+function loadRecoveryRegistry() {
+  const parsed = readBrowserStorageJson(RECOVERY_KEY, {});
+  return parsed && typeof parsed === "object" ? parsed : {};
+}
+
+function saveRecoveryRegistry(registry) {
+  try {
+    localStorage.setItem(RECOVERY_KEY, JSON.stringify(registry));
+  } catch (error) {
+    console.warn("Unable to save recovery registry.", error);
+  }
+}
+
+function getRecoveryCandidateForCurrentAccount() {
+  if (!cloudMode || !currentAccount) {
+    return null;
+  }
+
+  const browserAccounts = loadBrowserAccountsSnapshot();
+  const browserStoreMap = loadBrowserStoreMapSnapshot();
+  const recoveryCandidates = [];
+  const singleBrowserAccount = browserAccounts.length === 1;
+  const currentStoreKey = normalizeLookupKey(currentAccount.storeName);
+
+  browserAccounts.forEach((account) => {
+    const accountState = normalizeState(browserStoreMap[account.id] || buildEmptyState());
+    if (!hasRecoverableRecords(accountState)) {
+      return;
+    }
+
+    const matchesEmail = account.email === currentAccount.email;
+    const matchesStore = normalizeLookupKey(account.storeName) === currentStoreKey;
+    if (!matchesEmail && !matchesStore && !singleBrowserAccount) {
+      return;
+    }
+
+    const summary = summarizeStoreState(accountState);
+    recoveryCandidates.push({
+      kind: "browser-account",
+      sourceId: account.id,
+      label: account.storeName,
+      accountEmail: account.email,
+      state: accountState,
+      summary,
+      signature: buildRecoverySignature("browser-account", account.id, summary),
+      score: (matchesEmail ? 120 : 0) + (matchesStore ? 35 : 0) + (singleBrowserAccount ? 10 : 0) + summary.totalRecords,
+      updatedAt: account.lastLoginAt || account.createdAt,
+    });
+  });
+
+  const unmatchedStoreEntries = Object.entries(browserStoreMap).filter(([storeId]) => {
+    return !browserAccounts.some((account) => account.id === storeId);
+  });
+
+  if (!browserAccounts.length && unmatchedStoreEntries.length === 1) {
+    const [storeId, storeValue] = unmatchedStoreEntries[0];
+    const fallbackState = normalizeState(storeValue);
+    if (hasRecoverableRecords(fallbackState)) {
+      const summary = summarizeStoreState(fallbackState);
+      recoveryCandidates.push({
+        kind: "browser-store",
+        sourceId: storeId,
+        label: "Saved browser workspace",
+        accountEmail: "",
+        state: fallbackState,
+        summary,
+        signature: buildRecoverySignature("browser-store", storeId, summary),
+        score: 25 + summary.totalRecords,
+        updatedAt: latestStateTimestamp(fallbackState),
+      });
+    }
+  }
+
+  const legacyState = readLegacyStateSnapshot();
+  if (hasRecoverableRecords(legacyState)) {
+    const summary = summarizeStoreState(legacyState);
+    recoveryCandidates.push({
+      kind: "legacy-state",
+      sourceId: "legacy",
+      label: "Legacy browser backup",
+      accountEmail: "",
+      state: legacyState,
+      summary,
+      signature: buildRecoverySignature("legacy-state", "legacy", summary),
+      score: (browserAccounts.length ? 6 : 28) + summary.totalRecords,
+      updatedAt: latestStateTimestamp(legacyState),
+    });
+  }
+
+  const bestCandidate = recoveryCandidates
+    .filter((candidate) => !isRecoveryAlreadyImported(currentAccount, candidate))
+    .sort((left, right) => {
+      const scoreDifference = right.score - left.score;
+      if (scoreDifference) {
+        return scoreDifference;
+      }
+
+      return new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0);
+    })[0];
+
+  return bestCandidate || null;
+}
+
+function hasRecoverableRecords(storeState) {
+  if (!storeState) {
+    return false;
+  }
+
+  const summary = summarizeStoreState(storeState);
+  return summary.totalRecords > 0;
+}
+
+function summarizeStoreState(storeState) {
+  const normalizedState = normalizeState(storeState);
+  const products = normalizedState.products.length;
+  const transactions = normalizedState.transactions.length;
+  const debts = normalizedState.debts.length;
+  const expenses = normalizedState.expenses.length;
+
+  return {
+    products,
+    transactions,
+    debts,
+    expenses,
+    totalRecords: products + transactions + debts + expenses,
+  };
+}
+
+function formatRecoverySummary(summary) {
+  const parts = [];
+
+  if (summary.products) {
+    parts.push(`${summary.products} product${summary.products === 1 ? "" : "s"}`);
+  }
+
+  if (summary.transactions) {
+    parts.push(`${summary.transactions} transaction${summary.transactions === 1 ? "" : "s"}`);
+  }
+
+  if (summary.debts) {
+    parts.push(`${summary.debts} utang entr${summary.debts === 1 ? "y" : "ies"}`);
+  }
+
+  if (summary.expenses) {
+    parts.push(`${summary.expenses} expense${summary.expenses === 1 ? "" : "s"}`);
+  }
+
+  return parts.join(", ");
+}
+
+function isMeaningfullyEmptyState(storeState) {
+  return !hasRecoverableRecords(storeState);
+}
+
+function buildRecoverySignature(kind, sourceId, summary) {
+  return `${kind}:${sourceId}:${summary.products}:${summary.transactions}:${summary.debts}:${summary.expenses}`;
+}
+
+function isRecoveryAlreadyImported(account, candidate) {
+  if (!account || !candidate) {
+    return false;
+  }
+
+  const registry = loadRecoveryRegistry();
+  return registry[account.id] === candidate.signature;
+}
+
+function markRecoveryImported(account, candidate) {
+  if (!account || !candidate) {
+    return;
+  }
+
+  const registry = loadRecoveryRegistry();
+  registry[account.id] = candidate.signature;
+  saveRecoveryRegistry(registry);
+}
+
+function latestStateTimestamp(storeState) {
+  const timestamps = [];
+  const normalizedState = normalizeState(storeState);
+
+  normalizedState.products.forEach((product) => timestamps.push(product.updatedAt));
+  normalizedState.transactions.forEach((transaction) => timestamps.push(transaction.occurredAt));
+  normalizedState.debts.forEach((entry) => timestamps.push(entry.occurredAt));
+  normalizedState.expenses.forEach((expense) => timestamps.push(expense.occurredAt));
+  normalizedState.activity.forEach((activity) => timestamps.push(activity.occurredAt));
+
+  return timestamps.sort((left, right) => new Date(right) - new Date(left))[0] || new Date(0).toISOString();
+}
+
+function normalizeLookupKey(value) {
+  return `${value || ""}`.trim().toLowerCase();
 }
 
 function loadAccounts() {
@@ -2037,6 +2268,7 @@ function renderAll() {
 
   document.title = `${currentAccount.storeName} | Tindahan Tracker`;
   renderAccountProfile();
+  renderRecoveryBanner();
   elements.todayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
   populateDebtCustomerSuggestions();
   renderProductPhotoPreview();
@@ -2085,6 +2317,130 @@ function renderAccountProfile() {
     : "Each store account is maintained separately on this browser.";
   elements.storeNameDisplay.textContent = currentAccount.storeName;
   elements.storeOwnerDisplay.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
+}
+
+function renderRecoveryBanner() {
+  if (!elements.recoveryBanner || !elements.recoveryBannerText) {
+    return;
+  }
+
+  recoveryCandidate = getRecoveryCandidateForCurrentAccount();
+  if (!cloudMode || !currentAccount || !recoveryCandidate) {
+    elements.recoveryBanner.hidden = true;
+    return;
+  }
+
+  const sourceLabel =
+    recoveryCandidate.accountEmail && recoveryCandidate.accountEmail !== currentAccount.email
+      ? `${recoveryCandidate.label} (${recoveryCandidate.accountEmail})`
+      : recoveryCandidate.label;
+
+  elements.recoveryBannerText.textContent =
+    `Older browser-saved records were found for ${sourceLabel}: ${formatRecoverySummary(
+      recoveryCandidate.summary
+    )}. Import them into this shared store workspace.`;
+  elements.recoveryBanner.hidden = false;
+}
+
+async function handleRecoveryImport() {
+  if (!cloudMode || !currentAccount) {
+    return;
+  }
+
+  const candidate = recoveryCandidate || getRecoveryCandidateForCurrentAccount();
+  if (!candidate) {
+    renderRecoveryBanner();
+    setFeedback("No browser-saved store records were found for recovery on this device.", "warning");
+    return;
+  }
+
+  const currentState = normalizeState(state);
+  const replaceMode = isMeaningfullyEmptyState(currentState);
+  const sourceLabel =
+    candidate.accountEmail && candidate.accountEmail !== currentAccount.email
+      ? `${candidate.label} (${candidate.accountEmail})`
+      : candidate.label;
+  const shouldContinue = window.confirm(
+    `Recover ${formatRecoverySummary(candidate.summary)} from ${sourceLabel} into ${currentAccount.storeName}? ` +
+      (replaceMode
+        ? "This will restore the older browser-saved records into the current shared workspace."
+        : "This will merge the older browser-saved records with the current shared workspace.")
+  );
+
+  if (!shouldContinue) {
+    return;
+  }
+
+  const previousState = normalizeState(state);
+  const nextState = buildRecoveredStoreState(previousState, candidate);
+
+  setBusyState(true, replaceMode ? "Restoring browser-saved records..." : "Merging browser-saved records...");
+  state = nextState;
+  const saved = await saveState();
+  setBusyState(false);
+
+  if (!saved) {
+    state = previousState;
+    renderAll();
+    setFeedback("The browser-saved records could not be synchronized to Supabase. Please try again.", "danger");
+    return;
+  }
+
+  remoteStoreMap[currentAccount.id] = normalizeState(nextState);
+  markRecoveryImported(currentAccount, candidate);
+  renderAll();
+  setFeedback(
+    `${replaceMode ? "Restored" : "Merged"} ${formatRecoverySummary(candidate.summary).toLowerCase()} from browser storage.`,
+    "success"
+  );
+}
+
+function buildRecoveredStoreState(currentState, candidate) {
+  const importedState = normalizeState(candidate.state);
+  const recoveryActivity = buildRecoveryActivityEntry(candidate);
+
+  if (isMeaningfullyEmptyState(currentState)) {
+    return normalizeState({
+      ...importedState,
+      activity: mergeRecordsById(importedState.activity, [recoveryActivity]),
+    });
+  }
+
+  return normalizeState({
+    products: mergeRecordsById(currentState.products, importedState.products),
+    transactions: mergeRecordsById(currentState.transactions, importedState.transactions),
+    debts: mergeRecordsById(currentState.debts, importedState.debts),
+    expenses: mergeRecordsById(currentState.expenses, importedState.expenses),
+    activity: mergeRecordsById(currentState.activity, [...importedState.activity, recoveryActivity]),
+  });
+}
+
+function buildRecoveryActivityEntry(candidate) {
+  return normalizeActivity({
+    id: uid("activity"),
+    kind: "recovery",
+    message: `Recovered ${formatRecoverySummary(candidate.summary).toLowerCase()} from ${candidate.label}.`,
+    occurredAt: new Date().toISOString(),
+  });
+}
+
+function mergeRecordsById(currentRecords, importedRecords) {
+  const merged = Array.isArray(currentRecords) ? [...currentRecords] : [];
+  const seen = new Set(merged.map((record) => `${record?.id || ""}`));
+
+  (importedRecords || []).forEach((record) => {
+    const recordId = `${record?.id || ""}`;
+    if (!record || (recordId && seen.has(recordId))) {
+      return;
+    }
+
+    merged.push(record);
+    if (recordId) {
+      seen.add(recordId);
+    }
+  });
+
+  return merged;
 }
 
 function renderAdminProfile() {

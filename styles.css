@@ -615,6 +615,32 @@ button {
   line-height: 1.5;
 }
 
+.recovery-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(243, 180, 66, 0.14);
+  border: 1px solid rgba(243, 180, 66, 0.26);
+}
+
+.recovery-copy {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.recovery-copy p:last-child {
+  color: #6d5424;
+  line-height: 1.6;
+}
+
+.recovery-banner .button {
+  width: auto;
+  min-width: 12.5rem;
+}
+
 .button {
   border: 1px solid transparent;
   border-radius: var(--radius-md);
@@ -1546,7 +1572,8 @@ body.is-busy {
   }
 
   .auth-brief-card,
-  .auth-form-head {
+  .auth-form-head,
+  .recovery-banner {
     flex-direction: column;
     align-items: start;
   }
@@ -1578,5 +1605,9 @@ body.is-busy {
   .auth-form-actions,
   .auth-support-actions {
     display: grid;
+  }
+
+  .recovery-banner .button {
+    width: 100%;
   }
 }
