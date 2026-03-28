@@ -6,22 +6,127 @@
   <title>Tindahan Tracker</title>
   <meta
     name="description"
-    content="Track sari-sari store products, stock levels, sales, and restocking in one simple dashboard."
+    content="Track sari-sari store products, stock levels, sales, restocking, and store-owner logins in one dashboard."
   >
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="page-shell">
+  <section class="auth-shell" id="auth-shell">
+    <div class="auth-layout">
+      <section class="panel auth-story">
+        <p class="eyebrow">Built for sari-sari stores</p>
+        <h1>Tindahan Tracker</h1>
+        <p class="hero-lead">
+          Let every store owner sign in to their own inventory board, check stock quickly, and keep daily product movement organized.
+        </p>
+
+        <div class="auth-feature-grid">
+          <article class="auth-feature-card">
+            <strong>Separate store space</strong>
+            <p>Each account gets its own saved products, sales, and restock history on this browser.</p>
+          </article>
+
+          <article class="auth-feature-card">
+            <strong>Fast daily tracking</strong>
+            <p>Log sales, refill stock, search items, and see low-stock warnings in one place.</p>
+          </article>
+
+          <article class="auth-feature-card">
+            <strong>Backup ready</strong>
+            <p>Export a JSON backup and import it again whenever you want to move or restore store data.</p>
+          </article>
+        </div>
+
+        <div class="auth-note">
+          <span>Browser-only login</span>
+          <p>
+            This version keeps each store account on the current browser and device. For true shared cloud accounts across multiple devices, we can connect a backend next.
+          </p>
+        </div>
+      </section>
+
+      <section class="panel auth-card">
+        <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+          <button class="auth-tab is-active" id="login-tab" type="button" role="tab" aria-selected="true">
+            Log In
+          </button>
+          <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false">
+            Create Account
+          </button>
+        </div>
+
+        <div class="auth-panel">
+          <div class="auth-copy">
+            <p class="eyebrow">Store owner access</p>
+            <h2 id="auth-title">Log in to your store</h2>
+            <p id="auth-subtitle">
+              Use your email and password to open your store dashboard on this browser.
+            </p>
+          </div>
+
+          <form class="stack-form" id="login-form">
+            <label class="field">
+              <span>Email address</span>
+              <input id="login-email" type="email" placeholder="name@store.com" autocomplete="email" required>
+            </label>
+
+            <label class="field">
+              <span>Password</span>
+              <input id="login-password" type="password" minlength="6" placeholder="Enter your password" autocomplete="current-password" required>
+            </label>
+
+            <button class="button primary" type="submit">Log In</button>
+          </form>
+
+          <form class="stack-form" id="signup-form" hidden>
+            <label class="field">
+              <span>Store name</span>
+              <input id="signup-store-name" type="text" maxlength="80" placeholder="Ex. Aling Nena Store" required>
+            </label>
+
+            <label class="field">
+              <span>Owner name</span>
+              <input id="signup-owner-name" type="text" maxlength="80" placeholder="Ex. Maria Santos" required>
+            </label>
+
+            <label class="field">
+              <span>Email address</span>
+              <input id="signup-email" type="email" placeholder="name@store.com" autocomplete="email" required>
+            </label>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>Password</span>
+                <input id="signup-password" type="password" minlength="6" placeholder="At least 6 characters" autocomplete="new-password" required>
+              </label>
+
+              <label class="field">
+                <span>Confirm password</span>
+                <input id="signup-confirm-password" type="password" minlength="6" placeholder="Repeat password" autocomplete="new-password" required>
+              </label>
+            </div>
+
+            <button class="button primary" type="submit">Create Account</button>
+          </form>
+
+          <p class="auth-message" id="auth-message">Create an account to start using your own store dashboard.</p>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <div class="page-shell" id="app-shell" hidden>
     <header class="hero panel">
       <div class="hero-copy">
         <p class="eyebrow">Sari-sari store product tracker</p>
-        <h1>Tindahan Tracker</h1>
-        <p class="hero-lead">
+        <h1 id="store-heading">Tindahan Tracker</h1>
+        <p class="hero-lead" id="store-subtitle">
           Check every product, log sales quickly, and catch low stock before your shelves go empty.
         </p>
         <div class="hero-notes">
           <span id="today-label">Loading your store snapshot...</span>
-          <span>Everything saves on this device until you export a backup.</span>
+          <span id="account-badge">Preparing store profile...</span>
+          <span id="session-note">Each store account is saved separately on this browser.</span>
         </div>
       </div>
 
@@ -29,7 +134,8 @@
         <div class="hero-actions">
           <button class="button ghost" id="export-data" type="button">Export Backup</button>
           <button class="button ghost" id="import-trigger" type="button">Import Backup</button>
-          <button class="button soft" id="reset-demo" type="button">Reload Demo Store</button>
+          <button class="button soft" id="reset-demo" type="button">Load Demo Inventory</button>
+          <button class="button ghost" id="logout-button" type="button">Log Out</button>
           <input
             class="visually-hidden"
             id="import-file"
@@ -37,6 +143,13 @@
             accept=".json,application/json"
           >
         </div>
+
+        <div class="account-card">
+          <p class="eyebrow">Logged in store</p>
+          <h2 id="store-name-display">Store name</h2>
+          <p id="store-owner-display">Owner details</p>
+        </div>
+
         <p class="feedback-message" id="feedback-message">Ready to track your products.</p>
       </div>
     </header>

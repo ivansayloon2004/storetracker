@@ -1,3 +1,6 @@
 Thumbs.db
 .DS_Store
 desktop.ini
+.chrome-profile/
+dom-check.html
+auth-check.png

@@ -1,4 +1,8 @@
-const STORAGE_KEY = "tindahan-tracker-state-v1";
+const LEGACY_STORAGE_KEY = "tindahan-tracker-state-v1";
+const ACCOUNTS_KEY = "tindahan-tracker-accounts-v1";
+const SESSION_KEY = "tindahan-tracker-session-v1";
+const STORE_DATA_KEY = "tindahan-tracker-store-data-v1";
+
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
   currency: "PHP",
@@ -17,17 +21,45 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
   year: "numeric",
 });
 
-let state = loadState();
+let accounts = loadAccounts();
+let session = loadSession();
+let currentAccount = resolveCurrentAccount();
+let state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
 const filters = {
   search: "",
   category: "all",
   stock: "all",
 };
 
+let authMode = "login";
 let feedbackTimer;
+let authMessageTimer;
 
 const elements = {
+  authShell: document.querySelector("#auth-shell"),
+  appShell: document.querySelector("#app-shell"),
+  loginTab: document.querySelector("#login-tab"),
+  signupTab: document.querySelector("#signup-tab"),
+  authTitle: document.querySelector("#auth-title"),
+  authSubtitle: document.querySelector("#auth-subtitle"),
+  authMessage: document.querySelector("#auth-message"),
+  loginForm: document.querySelector("#login-form"),
+  loginEmail: document.querySelector("#login-email"),
+  loginPassword: document.querySelector("#login-password"),
+  signupForm: document.querySelector("#signup-form"),
+  signupStoreName: document.querySelector("#signup-store-name"),
+  signupOwnerName: document.querySelector("#signup-owner-name"),
+  signupEmail: document.querySelector("#signup-email"),
+  signupPassword: document.querySelector("#signup-password"),
+  signupConfirmPassword: document.querySelector("#signup-confirm-password"),
   todayLabel: document.querySelector("#today-label"),
+  accountBadge: document.querySelector("#account-badge"),
+  sessionNote: document.querySelector("#session-note"),
+  storeHeading: document.querySelector("#store-heading"),
+  storeSubtitle: document.querySelector("#store-subtitle"),
+  storeNameDisplay: document.querySelector("#store-name-display"),
+  storeOwnerDisplay: document.querySelector("#store-owner-display"),
+  logoutButton: document.querySelector("#logout-button"),
   feedbackMessage: document.querySelector("#feedback-message"),
   totalSkus: document.querySelector("#total-skus"),
   totalUnitsFoot: document.querySelector("#total-units-foot"),
@@ -76,9 +108,20 @@ const elements = {
 };
 
 setupEventListeners();
-renderAll();
+syncInterface();
 
 function setupEventListeners() {
+  elements.loginTab.addEventListener("click", () => setAuthMode("login"));
+  elements.signupTab.addEventListener("click", () => setAuthMode("signup"));
+
+  elements.loginForm.addEventListener("submit", (event) => {
+    void handleLoginSubmit(event);
+  });
+
+  elements.signupForm.addEventListener("submit", (event) => {
+    void handleSignupSubmit(event);
+  });
+
   elements.searchInput.addEventListener("input", (event) => {
     filters.search = event.target.value.trim().toLowerCase();
     renderInventory();
@@ -98,34 +141,206 @@ function setupEventListeners() {
   elements.productClear.addEventListener("click", resetProductForm);
   elements.saleForm.addEventListener("submit", handleSaleSubmit);
   elements.restockForm.addEventListener("submit", handleRestockSubmit);
-
   elements.saleProduct.addEventListener("change", updateSalePreview);
   elements.saleQuantity.addEventListener("input", updateSalePreview);
   elements.restockProduct.addEventListener("change", updateRestockPreview);
   elements.restockQuantity.addEventListener("input", updateRestockPreview);
-
   elements.inventoryBody.addEventListener("click", handleInventoryActions);
   elements.reorderBoard.addEventListener("click", handleReorderActions);
-
   elements.exportData.addEventListener("click", exportState);
   elements.importTrigger.addEventListener("click", () => elements.importFile.click());
   elements.importFile.addEventListener("change", importStateFromFile);
   elements.resetDemo.addEventListener("click", resetToDemoState);
+  elements.logoutButton.addEventListener("click", logoutCurrentAccount);
 }
 
-function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
+function syncInterface() {
+  currentAccount = resolveCurrentAccount();
+  state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
+  renderAuthMode();
+  renderVisibility();
+
+  if (currentAccount) {
+    resetAuthForms();
+    renderAll();
+  } else {
+    document.title = "Tindahan Tracker";
+    setAuthMessage("Create an account to start using your own store dashboard.");
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode === "signup" ? "signup" : "login";
+  renderAuthMode();
+}
+
+function renderAuthMode() {
+  const isSignup = authMode === "signup";
+
+  elements.loginForm.hidden = isSignup;
+  elements.signupForm.hidden = !isSignup;
+  elements.loginTab.classList.toggle("is-active", !isSignup);
+  elements.signupTab.classList.toggle("is-active", isSignup);
+  elements.loginTab.setAttribute("aria-selected", String(!isSignup));
+  elements.signupTab.setAttribute("aria-selected", String(isSignup));
+  elements.authTitle.textContent = isSignup ? "Create your store account" : "Log in to your store";
+  elements.authSubtitle.textContent = isSignup
+    ? "Create a browser-based account so your store inventory stays separate from other store owners."
+    : "Use your email and password to open your store dashboard on this browser.";
+}
+
+function renderVisibility() {
+  const loggedIn = Boolean(currentAccount);
+  elements.authShell.hidden = loggedIn;
+  elements.appShell.hidden = !loggedIn;
+}
+
+function loadAccounts() {
+  const saved = localStorage.getItem(ACCOUNTS_KEY);
 
   if (!saved) {
-    return buildDefaultState();
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed.map(normalizeAccount).filter(Boolean) : [];
+  } catch (error) {
+    console.warn("Unable to read saved accounts.", error);
+    return [];
+  }
+}
+
+function saveAccounts() {
+  localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function loadSession() {
+  const saved = localStorage.getItem(SESSION_KEY);
+
+  if (!saved) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    return parsed?.accountId ? { accountId: `${parsed.accountId}` } : null;
+  } catch (error) {
+    console.warn("Unable to read saved session.", error);
+    return null;
+  }
+}
+
+function saveSession(accountId) {
+  session = { accountId };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
+
+function clearSession() {
+  session = null;
+  localStorage.removeItem(SESSION_KEY);
+}
+
+function resolveCurrentAccount() {
+  if (!session?.accountId) {
+    return null;
+  }
+
+  return accounts.find((account) => account.id === session.accountId) || null;
+}
+
+function normalizeAccount(account) {
+  if (!account || !account.id || !account.email || !account.passwordHash || !account.passwordSalt) {
+    return null;
+  }
+
+  return {
+    id: `${account.id}`,
+    storeName: `${account.storeName || "My Store"}`.trim() || "My Store",
+    ownerName: `${account.ownerName || "Store Owner"}`.trim() || "Store Owner",
+    email: normalizeEmail(account.email),
+    passwordSalt: `${account.passwordSalt}`,
+    passwordHash: `${account.passwordHash}`,
+    createdAt: normalizeDate(account.createdAt),
+    lastLoginAt: normalizeDate(account.lastLoginAt || account.createdAt),
+  };
+}
+
+function loadStoreMap() {
+  const saved = localStorage.getItem(STORE_DATA_KEY);
+
+  if (!saved) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(saved);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    console.warn("Unable to read saved store data.", error);
+    return {};
+  }
+}
+
+function saveStoreMap(storeMap) {
+  localStorage.setItem(STORE_DATA_KEY, JSON.stringify(storeMap));
+}
+
+function initializeStoreStateForAccount(account) {
+  const storeMap = loadStoreMap();
+
+  if (storeMap[account.id]) {
+    return normalizeState(storeMap[account.id]);
+  }
+
+  const legacyState = readLegacyState();
+  const seededState = legacyState || buildFreshStoreState(account.storeName);
+  storeMap[account.id] = seededState;
+  saveStoreMap(storeMap);
+
+  if (legacyState) {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  }
+
+  return seededState;
+}
+
+function readLegacyState() {
+  const saved = localStorage.getItem(LEGACY_STORAGE_KEY);
+
+  if (!saved) {
+    return null;
   }
 
   try {
     return normalizeState(JSON.parse(saved));
   } catch (error) {
-    console.warn("Unable to parse saved state. Loading demo data.", error);
-    return buildDefaultState();
+    console.warn("Unable to migrate legacy inventory state.", error);
+    return null;
   }
+}
+
+function buildEmptyState() {
+  return {
+    products: [],
+    transactions: [],
+    activity: [],
+  };
+}
+
+function buildFreshStoreState(storeName) {
+  return {
+    products: [],
+    transactions: [],
+    activity: [
+      buildActivity(
+        "snapshot",
+        `${storeName} is ready. Add your first products to start tracking inventory.`,
+        null,
+        0
+      ),
+    ],
+  };
 }
 
 function buildDefaultState() {
@@ -346,11 +561,124 @@ function normalizeDate(value) {
   return Number.isNaN(candidate.getTime()) ? new Date().toISOString() : candidate.toISOString();
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+async function handleSignupSubmit(event) {
+  event.preventDefault();
+
+  const storeName = elements.signupStoreName.value.trim();
+  const ownerName = elements.signupOwnerName.value.trim();
+  const email = normalizeEmail(elements.signupEmail.value);
+  const password = elements.signupPassword.value;
+  const confirmPassword = elements.signupConfirmPassword.value;
+
+  if (!storeName || !ownerName || !email) {
+    setAuthMessage("Please complete the account form before continuing.", "danger");
+    return;
+  }
+
+  if (password.length < 6) {
+    setAuthMessage("Use a password with at least 6 characters.", "danger");
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    setAuthMessage("The passwords do not match.", "danger");
+    return;
+  }
+
+  if (accounts.some((account) => account.email === email)) {
+    setAuthMode("login");
+    elements.loginEmail.value = email;
+    setAuthMessage("An account with that email already exists. Log in instead.", "warning");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const passwordSalt = uid("salt");
+  const passwordHash = await hashPassword(password, passwordSalt);
+
+  const account = {
+    id: uid("account"),
+    storeName,
+    ownerName,
+    email,
+    passwordSalt,
+    passwordHash,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+
+  accounts.unshift(account);
+  saveAccounts();
+  saveSession(account.id);
+  currentAccount = account;
+  state = initializeStoreStateForAccount(account);
+  resetAuthForms();
+  renderVisibility();
+  renderAll();
+  setFeedback(`Welcome, ${ownerName}. ${storeName} is ready.`, "success");
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+
+  const email = normalizeEmail(elements.loginEmail.value);
+  const password = elements.loginPassword.value;
+  const account = accounts.find((entry) => entry.email === email);
+
+  if (!account) {
+    setAuthMessage("No account was found for that email yet.", "danger");
+    return;
+  }
+
+  const passwordHash = await hashPassword(password, account.passwordSalt);
+
+  if (passwordHash !== account.passwordHash) {
+    setAuthMessage("Incorrect password. Please try again.", "danger");
+    return;
+  }
+
+  account.lastLoginAt = new Date().toISOString();
+  accounts = accounts.map((entry) => (entry.id === account.id ? account : entry));
+  saveAccounts();
+  saveSession(account.id);
+  currentAccount = account;
+  state = initializeStoreStateForAccount(account);
+  renderVisibility();
+  renderAll();
+  elements.loginPassword.value = "";
+  setFeedback(`Welcome back, ${account.ownerName}.`, "success");
+}
+
+function logoutCurrentAccount() {
+  clearSession();
+  currentAccount = null;
+  state = buildEmptyState();
+  resetAppForms();
+  renderVisibility();
+  setAuthMode("login");
+  setAuthMessage("You logged out. Another store owner can sign in now.", "success");
+}
+
+function resetAuthForms() {
+  elements.loginForm.reset();
+  elements.signupForm.reset();
+}
+
+function resetAppForms() {
+  resetProductForm();
+  elements.saleForm.reset();
+  elements.restockForm.reset();
+  updateSalePreview();
+  updateRestockPreview();
 }
 
 function renderAll() {
+  if (!currentAccount) {
+    return;
+  }
+
+  document.title = `${currentAccount.storeName} | Tindahan Tracker`;
+  renderAccountProfile();
   elements.todayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
   renderStats();
   populateCategoryFilter();
@@ -362,6 +690,25 @@ function renderAll() {
   renderRecentActivity();
   updateSalePreview();
   updateRestockPreview();
+}
+
+function renderAccountProfile() {
+  elements.storeHeading.textContent = currentAccount.storeName;
+  elements.storeSubtitle.textContent = `${currentAccount.ownerName} can track products, sales, and restocks from one dashboard.`;
+  elements.accountBadge.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
+  elements.sessionNote.textContent = "Each store account is saved separately on this browser.";
+  elements.storeNameDisplay.textContent = currentAccount.storeName;
+  elements.storeOwnerDisplay.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
+}
+
+function saveState() {
+  if (!currentAccount) {
+    return;
+  }
+
+  const storeMap = loadStoreMap();
+  storeMap[currentAccount.id] = normalizeState(state);
+  saveStoreMap(storeMap);
 }
 
 function renderStats() {
@@ -446,6 +793,10 @@ function populateSelect(selectElement, options, selectedValue) {
 }
 
 function renderInventory() {
+  if (!currentAccount) {
+    return;
+  }
+
   const products = getFilteredProducts();
   const visibleValue = sum(products.map((product) => product.stock * product.price));
 
@@ -736,12 +1087,7 @@ function handleSaleSubmit(event) {
     occurredAt: new Date().toISOString(),
   });
 
-  addActivity(
-    "sale",
-    `Logged sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
-    product
-  );
-
+  addActivity("sale", `Logged sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`, product);
   saveAndRefresh(`${product.name} sale saved.`, "success");
   elements.saleForm.reset();
   updateSalePreview();
@@ -780,12 +1126,7 @@ function handleRestockSubmit(event) {
     occurredAt: new Date().toISOString(),
   });
 
-  addActivity(
-    "restock",
-    `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
-    product
-  );
-
+  addActivity("restock", `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`, product);
   saveAndRefresh(`${product.name} restock saved.`, "success");
   elements.restockForm.reset();
   updateRestockPreview();
@@ -909,9 +1250,18 @@ function updateRestockPreview() {
 }
 
 function exportState() {
+  if (!currentAccount) {
+    return;
+  }
+
   const payload = JSON.stringify(
     {
-      ...state,
+      account: {
+        storeName: currentAccount.storeName,
+        ownerName: currentAccount.ownerName,
+        email: currentAccount.email,
+      },
+      state,
       exportedAt: new Date().toISOString(),
     },
     null,
@@ -921,7 +1271,7 @@ function exportState() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `tindahan-tracker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `${slugify(currentAccount.storeName)}-backup-${new Date().toISOString().slice(0, 10)}.json`;
   document.body.append(link);
   link.click();
   link.remove();
@@ -938,8 +1288,8 @@ function importStateFromFile(event) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const parsed = normalizeState(JSON.parse(`${reader.result || "{}"}`));
-      state = parsed;
+      const parsed = JSON.parse(`${reader.result || "{}"}`);
+      state = normalizeState(parsed.state ?? parsed);
       addActivity("import", "Imported a backup file into this tracker.", null);
       saveAndRefresh("Backup imported successfully.", "success");
       resetProductForm();
@@ -954,14 +1304,14 @@ function importStateFromFile(event) {
 }
 
 function resetToDemoState() {
-  const confirmed = window.confirm("Reload the demo sari-sari store data? This replaces your current saved data.");
+  const confirmed = window.confirm("Load the demo inventory into this store account? This replaces the current saved data.");
   if (!confirmed) {
     return;
   }
 
   state = buildDefaultState();
-  addActivity("reset", "Reloaded the demo sari-sari store snapshot.", null);
-  saveAndRefresh("Demo store reloaded.", "warning");
+  addActivity("reset", "Loaded the demo sari-sari store snapshot.", null);
+  saveAndRefresh("Demo inventory loaded.", "warning");
   resetProductForm();
 }
 
@@ -1064,6 +1414,24 @@ function formatActivityLabel(kind) {
   }[kind] || "Update";
 }
 
+function setAuthMessage(message, tone = "default") {
+  window.clearTimeout(authMessageTimer);
+  elements.authMessage.textContent = message;
+
+  if (tone === "default") {
+    delete elements.authMessage.dataset.tone;
+    return;
+  }
+
+  elements.authMessage.dataset.tone = tone;
+  authMessageTimer = window.setTimeout(() => {
+    elements.authMessage.textContent = authMode === "signup"
+      ? "Create an account to start using your own store dashboard."
+      : "Use your email and password to open your store dashboard on this browser.";
+    delete elements.authMessage.dataset.tone;
+  }, 4200);
+}
+
 function setFeedback(message, tone = "default") {
   window.clearTimeout(feedbackTimer);
   elements.feedbackMessage.textContent = message;
@@ -1078,6 +1446,37 @@ function setFeedback(message, tone = "default") {
     elements.feedbackMessage.textContent = "Ready to track your products.";
     delete elements.feedbackMessage.dataset.tone;
   }, 4200);
+}
+
+async function hashPassword(password, salt) {
+  const input = `${salt}::${password}`;
+
+  if (window.crypto?.subtle) {
+    const encoded = new TextEncoder().encode(input);
+    const digest = await window.crypto.subtle.digest("SHA-256", encoded);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  return fallbackHash(input);
+}
+
+function fallbackHash(input) {
+  let hash = 5381;
+
+  for (let index = 0; index < input.length; index += 1) {
+    hash = (hash * 33) ^ input.charCodeAt(index);
+  }
+
+  return `fallback-${(hash >>> 0).toString(16)}`;
+}
+
+function normalizeEmail(value) {
+  return `${value || ""}`.trim().toLowerCase();
+}
+
+function slugify(value) {
+  const normalized = `${value || "store"}`.trim().toLowerCase();
+  return normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "store";
 }
 
 function sum(values) {
