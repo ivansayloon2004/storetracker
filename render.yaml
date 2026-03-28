@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: tindahan-tracker
+    runtime: static
+    buildCommand: "true"
+    staticPublishPath: .
