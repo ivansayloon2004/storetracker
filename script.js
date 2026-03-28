@@ -24,6 +24,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
+const emailRedirectTo = new URL("/", window.location.href).toString();
 const supabaseClient = cloudMode
   ? window.supabase.createClient(cloudConfig.url, cloudConfig.anonKey, {
       auth: {
@@ -1186,6 +1187,7 @@ async function handleSignupSubmit(event) {
       email,
       password,
       options: {
+        emailRedirectTo,
         data: {
           store_name: storeName,
           owner_name: ownerName,
