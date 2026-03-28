@@ -213,7 +213,7 @@ function syncInterface() {
     resetAuthForms();
     renderAll();
   } else {
-    document.title = "Tindahan Tracker";
+    document.title = "Tindahan Tracker | Inventory Management Suite";
     setAuthMessage(defaultAuthMessage());
   }
 }
@@ -244,12 +244,13 @@ function renderAuthMode() {
   if (isSignup) {
     elements.authTitle.textContent = "Create your store account";
     elements.authSubtitle.textContent =
-      "Create a browser-based account so your store inventory stays separate from other store owners.";
+      "Register a browser-based store account so inventory records remain separate for each business on this device.";
   } else if (isAdmin) {
     renderAdminAuthMode();
   } else {
     elements.authTitle.textContent = "Log in to your store";
-    elements.authSubtitle.textContent = "Use your email and password to open your store dashboard on this browser.";
+    elements.authSubtitle.textContent =
+      "Use your registered email address and password to access the store workspace on this browser.";
   }
 }
 
@@ -557,7 +558,7 @@ function buildDefaultState() {
   ];
 
   const activity = [
-    buildActivity("snapshot", "Demo sari-sari store loaded and ready to use.", null, 5),
+    buildActivity("snapshot", "Demonstration inventory dataset prepared for review.", null, 5),
     buildActivity("sale", "Logged sale for 6 sachet of 3-in-1 Coffee Mix.", products[3], 135),
     buildActivity("sale", "Logged sale for 12 piece of Fresh Eggs.", products[6], 75),
     buildActivity("restock", "Restocked 20 sachet of Shampoo Sachet.", products[4], 26 * 60),
@@ -740,7 +741,7 @@ async function handleSignupSubmit(event) {
   resetAuthForms();
   renderVisibility();
   renderAll();
-  setFeedback(`Welcome, ${ownerName}. ${storeName} is ready.`, "success");
+  setFeedback(`Welcome, ${ownerName}. ${storeName} is now available.`, "success");
 }
 
 async function handleLoginSubmit(event) {
@@ -751,14 +752,14 @@ async function handleLoginSubmit(event) {
   const account = accounts.find((entry) => entry.email === email);
 
   if (!account) {
-    setAuthMessage("No account was found for that email yet.", "danger");
+    setAuthMessage("No store account is registered for that email address yet.", "danger");
     return;
   }
 
   const passwordHash = await hashPassword(password, account.passwordSalt);
 
   if (passwordHash !== account.passwordHash) {
-    setAuthMessage("Incorrect password. Please try again.", "danger");
+    setAuthMessage("The password you entered is incorrect. Please try again.", "danger");
     return;
   }
 
@@ -778,31 +779,33 @@ async function handleLoginSubmit(event) {
 function renderAdminAuthMode() {
   const hasAdmin = Boolean(adminRecord);
 
-  elements.authTitle.textContent = hasAdmin ? "Log in to admin panel" : "Set up your admin panel";
+  elements.authTitle.textContent = hasAdmin ? "Administrator sign in" : "Administrator setup";
   elements.authSubtitle.textContent = hasAdmin
-    ? "Use the admin credentials for this browser to monitor all saved store-owner accounts."
-    : "Create the first admin account for this browser so you can monitor all saved store-owner accounts.";
+    ? "Use the administrator credentials assigned to this browser to review all locally stored store accounts."
+    : "Create the administrator account for this browser to review all locally stored store accounts.";
   elements.adminSetupFields.hidden = hasAdmin;
   elements.adminLoginFields.hidden = !hasAdmin;
-  elements.adminModeNote.querySelector("span").textContent = hasAdmin ? "Admin login" : "Admin setup";
+  elements.adminModeNote.querySelector("span").textContent = hasAdmin
+    ? "Administrator Sign In"
+    : "Administrator Setup";
   elements.adminModeNote.querySelector("p").textContent = hasAdmin
-    ? "Only the browser admin can open the monitoring dashboard."
-    : "This one-time admin account will monitor all store owners saved in this browser.";
-  elements.adminSubmit.textContent = hasAdmin ? "Open Admin Panel" : "Set Up Admin";
+    ? "Only the assigned browser administrator may open the administrative workspace."
+    : "This one-time administrator account will oversee all store accounts saved in this browser.";
+  elements.adminSubmit.textContent = hasAdmin ? "Open Administrative Panel" : "Create Administrator";
 }
 
 function defaultAuthMessage() {
   if (authMode === "signup") {
-    return "Create an account to start using your own store dashboard.";
+    return "Register a store account to begin using the inventory workspace.";
   }
 
   if (authMode === "admin") {
     return adminRecord
-      ? "Log in as the browser admin to monitor all saved store-owner accounts."
-      : "Set up the first browser admin account to monitor all saved users.";
+      ? "Sign in as the browser administrator to review locally stored store accounts."
+      : "Create the administrator account for this browser to review locally stored store accounts.";
   }
 
-  return "Use your email and password to open your store dashboard on this browser.";
+  return "Use your registered email address and password to access the store workspace on this browser.";
 }
 
 async function handleAdminSubmit(event) {
@@ -815,7 +818,7 @@ async function handleAdminSubmit(event) {
     const confirmPassword = elements.adminConfirmPassword.value;
 
     if (!name || !email) {
-      setAuthMessage("Please complete the admin setup form first.", "danger");
+      setAuthMessage("Complete the administrator setup form before continuing.", "danger");
       return;
     }
 
@@ -825,7 +828,7 @@ async function handleAdminSubmit(event) {
     }
 
     if (password !== confirmPassword) {
-      setAuthMessage("The admin passwords do not match.", "danger");
+      setAuthMessage("The administrator passwords do not match.", "danger");
       return;
     }
 
@@ -851,7 +854,7 @@ async function handleAdminSubmit(event) {
     resetAuthForms();
     renderVisibility();
     renderAdminDashboard();
-    setAdminFeedback(`Admin panel is ready, ${name}.`, "success");
+    setAdminFeedback(`Administrator access has been prepared for ${name}.`, "success");
     return;
   }
 
@@ -859,14 +862,14 @@ async function handleAdminSubmit(event) {
   const password = elements.adminLoginPassword.value;
 
   if (email !== adminRecord.email) {
-    setAuthMessage("That admin email does not match this browser's admin account.", "danger");
+    setAuthMessage("That email address does not match the administrator account saved on this browser.", "danger");
     return;
   }
 
   const passwordHash = await hashPassword(password, adminRecord.passwordSalt);
 
   if (passwordHash !== adminRecord.passwordHash) {
-    setAuthMessage("Incorrect admin password. Please try again.", "danger");
+    setAuthMessage("The administrator password is incorrect. Please try again.", "danger");
     return;
   }
 
@@ -890,7 +893,7 @@ function logoutCurrentAccount() {
   resetAppForms();
   renderVisibility();
   setAuthMode("login");
-  setAuthMessage("You logged out. Another store owner can sign in now.", "success");
+  setAuthMessage("You have signed out. Another store account may now access this browser.", "success");
 }
 
 function logoutAdmin() {
@@ -900,7 +903,7 @@ function logoutAdmin() {
   state = buildEmptyState();
   renderVisibility();
   setAuthMode("admin");
-  setAuthMessage("Admin logged out. Sign back in to monitor store owners again.", "success");
+  setAuthMessage("Administrator signed out. Sign in again to continue monitoring store accounts.", "success");
 }
 
 function resetAuthForms() {
@@ -942,7 +945,7 @@ function renderAdminDashboard() {
     return;
   }
 
-  document.title = "Admin Panel | Tindahan Tracker";
+  document.title = "Administrative Control Panel | Tindahan Tracker";
   renderAdminProfile();
   renderAdminStats();
   renderAdminUsersTable();
@@ -953,9 +956,10 @@ function renderAdminDashboard() {
 
 function renderAccountProfile() {
   elements.storeHeading.textContent = currentAccount.storeName;
-  elements.storeSubtitle.textContent = `${currentAccount.ownerName} can track products, sales, and restocks from one dashboard.`;
+  elements.storeSubtitle.textContent =
+    `${currentAccount.ownerName} can manage products, sales records, and restock entries from one structured workspace.`;
   elements.accountBadge.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
-  elements.sessionNote.textContent = "Each store account is saved separately on this browser.";
+  elements.sessionNote.textContent = "Each store account is maintained separately on this browser.";
   elements.storeNameDisplay.textContent = currentAccount.storeName;
   elements.storeOwnerDisplay.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
 }
@@ -963,7 +967,7 @@ function renderAccountProfile() {
 function renderAdminProfile() {
   const summaries = getAdminStoreSummaries();
   elements.adminTodayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
-  elements.adminCoverageNote.textContent = `Monitoring ${summaries.length} browser-local store account${
+  elements.adminCoverageNote.textContent = `Reviewing ${summaries.length} locally stored store account${
     summaries.length === 1 ? "" : "s"
   }.`;
   elements.adminNameDisplay.textContent = currentAdmin.name;
@@ -1003,15 +1007,15 @@ function renderStats() {
   elements.lowStockCount.textContent = numberFormatter.format(lowStockItems.length);
   elements.lowStockFoot.textContent = lowStockItems.length
     ? `${lowStockItems.filter((item) => getProductStatus(item).key === "out").length} item(s) are out of stock`
-    : "All products look healthy";
+    : "All products are within acceptable stock levels";
 
   if (totalProducts) {
     const topCategory = getCategorySummaries()[0];
     elements.stockValueFoot.textContent = topCategory
-      ? `${topCategory.name} holds the biggest stock value`
-      : "Based on your selling price";
+      ? `${topCategory.name} holds the highest stock value`
+      : "Calculated from recorded selling prices";
   } else {
-    elements.stockValueFoot.textContent = "Add products to compute stock value";
+    elements.stockValueFoot.textContent = "Add products to calculate stock value";
   }
 }
 
@@ -1024,15 +1028,15 @@ function renderAdminStats() {
   const riskStores = summaries.filter((summary) => summary.lowStockCount > 0).length;
 
   elements.adminTotalUsers.textContent = numberFormatter.format(totalUsers);
-  elements.adminUsersFoot.textContent = `${totalUsers} store owner${totalUsers === 1 ? "" : "s"} registered locally`;
+  elements.adminUsersFoot.textContent = `${totalUsers} store account${totalUsers === 1 ? "" : "s"} registered on this browser`;
   elements.adminTotalProducts.textContent = numberFormatter.format(totalProducts);
-  elements.adminProductsFoot.textContent = `${totalProducts} products across all local stores`;
+  elements.adminProductsFoot.textContent = `${totalProducts} products recorded across all local stores`;
   elements.adminTotalValue.textContent = currencyFormatter.format(totalValue);
   elements.adminValueFoot.textContent = `Today's combined sales: ${currencyFormatter.format(totalTodaySales)}`;
   elements.adminRiskStores.textContent = numberFormatter.format(riskStores);
   elements.adminRiskFoot.textContent = riskStores
     ? `${riskStores} store${riskStores === 1 ? "" : "s"} need restock attention`
-    : "No stores flagged right now";
+    : "No stores currently require restock attention";
 }
 
 function renderAdminUsersTable() {
@@ -1043,7 +1047,7 @@ function renderAdminUsersTable() {
       <tr>
         <td colspan="8">
           <div class="empty-state">
-            No store-owner accounts have been created on this browser yet.
+            No store accounts have been registered on this browser yet.
           </div>
         </td>
       </tr>
@@ -1078,10 +1082,10 @@ function renderAdminUsersTable() {
       .join("");
   }
 
-  elements.adminSummaryText.textContent = `Showing ${summaries.length} browser-local store account${
+  elements.adminSummaryText.textContent = `Showing ${summaries.length} locally stored store account${
     summaries.length === 1 ? "" : "s"
   }`;
-  elements.adminSummaryNote.textContent = "This dashboard only sees users saved on this browser and device.";
+  elements.adminSummaryNote.textContent = "This panel reports only on accounts saved on this browser and device.";
 }
 
 function renderAdminAttentionList() {
@@ -1148,7 +1152,7 @@ function renderAdminOwnerList() {
   if (!summaries.length) {
     elements.adminOwnerList.innerHTML = `
       <div class="empty-state">
-        Create store-owner accounts first to build the admin watch list.
+        Register store accounts first to populate this administrative view.
       </div>
     `;
     return;
@@ -1296,7 +1300,7 @@ function renderReorderBoard() {
   if (!lowStockProducts.length) {
     elements.reorderBoard.innerHTML = `
       <div class="empty-state">
-        Nice work. Nothing is below reorder level right now.
+        No products are currently below their reorder level.
       </div>
     `;
     return;
@@ -1747,7 +1751,7 @@ function importStateFromFile(event) {
     try {
       const parsed = JSON.parse(`${reader.result || "{}"}`);
       state = normalizeState(parsed.state ?? parsed);
-      addActivity("import", "Imported a backup file into this tracker.", null);
+      addActivity("import", "Imported a backup file into the inventory workspace.", null);
       saveAndRefresh("Backup imported successfully.", "success");
       resetProductForm();
     } catch (error) {
@@ -1761,14 +1765,16 @@ function importStateFromFile(event) {
 }
 
 function resetToDemoState() {
-  const confirmed = window.confirm("Load the demo inventory into this store account? This replaces the current saved data.");
+  const confirmed = window.confirm(
+    "Load the demonstration inventory into this store account? This will replace the current saved data."
+  );
   if (!confirmed) {
     return;
   }
 
   state = buildDefaultState();
-  addActivity("reset", "Loaded the demo sari-sari store snapshot.", null);
-  saveAndRefresh("Demo inventory loaded.", "warning");
+  addActivity("reset", "Loaded the demonstration inventory dataset.", null);
+  saveAndRefresh("Demonstration inventory loaded.", "warning");
   resetProductForm();
 }
 
@@ -1975,7 +1981,7 @@ function setFeedback(message, tone = "default") {
   }
 
   feedbackTimer = window.setTimeout(() => {
-    elements.feedbackMessage.textContent = "Ready to track your products.";
+    elements.feedbackMessage.textContent = "The inventory workspace is ready.";
     delete elements.feedbackMessage.dataset.tone;
   }, 4200);
 }
@@ -1991,7 +1997,7 @@ function setAdminFeedback(message, tone = "default") {
   }
 
   adminFeedbackTimer = window.setTimeout(() => {
-    elements.adminFeedbackMessage.textContent = "Monitoring all local store-owner accounts.";
+    elements.adminFeedbackMessage.textContent = "Administrative monitoring is active.";
     delete elements.adminFeedbackMessage.dataset.tone;
   }, 4200);
 }
