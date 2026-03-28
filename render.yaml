@@ -2,5 +2,5 @@ services:
   - type: web
     name: tindahan-tracker
     runtime: static
-    buildCommand: "true"
+    buildCommand: "echo Static site ready"
     staticPublishPath: .
