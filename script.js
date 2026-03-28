@@ -24,6 +24,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const CLOUD_SYNC_INTERVAL_MS = 8000;
+const APP_VERSION = "20260329h";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -68,6 +69,7 @@ let recoveryCandidate = null;
 let cloudSyncPollId = 0;
 let cloudSyncInFlight = false;
 let lastCloudSyncMarker = "";
+let deferredInstallPrompt = null;
 
 const elements = {
   authShell: document.querySelector("#auth-shell"),
@@ -82,6 +84,9 @@ const elements = {
   authTitle: document.querySelector("#auth-title"),
   authSubtitle: document.querySelector("#auth-subtitle"),
   authMessage: document.querySelector("#auth-message"),
+  installPanels: document.querySelectorAll("[data-install-panel]"),
+  installPanelNotes: document.querySelectorAll("[data-install-note]"),
+  installButtons: document.querySelectorAll("[data-install-button]"),
   loginForm: document.querySelector("#login-form"),
   loginEmail: document.querySelector("#login-email"),
   loginPassword: document.querySelector("#login-password"),
@@ -263,6 +268,7 @@ const elements = {
 
 setupSegmentedTabs();
 setupEventListeners();
+setupPwaSupport();
 if (cloudMode) {
   supabaseClient.auth.onAuthStateChange(() => {
     void syncInterface();
@@ -278,6 +284,38 @@ if (cloudMode) {
   startCloudSyncWatcher();
 }
 void syncInterface();
+
+function setupPwaSupport() {
+  if (elements.installButtons.length) {
+    elements.installButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        void handleInstallButtonClick();
+      });
+    });
+  }
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    refreshInstallPanels();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    refreshInstallPanels();
+    announceInstallMessage(
+      "Tindahan Tracker is now installed. Open it from your home screen for faster store access.",
+      "success"
+    );
+  });
+
+  window.matchMedia?.("(display-mode: standalone)")?.addEventListener?.("change", () => {
+    refreshInstallPanels();
+  });
+
+  void registerServiceWorker();
+  refreshInstallPanels();
+}
 
 function setupSegmentedTabs() {
   const buttons = document.querySelectorAll("[data-tab-group][data-tab-target]");
@@ -408,6 +446,123 @@ function setupEventListeners() {
   });
   elements.adminExportButton.addEventListener("click", exportAdminReport);
   elements.adminLogoutButton.addEventListener("click", logoutAdmin);
+}
+
+function isStandaloneApp() {
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+}
+
+function isIosInstallableDevice() {
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent || "");
+}
+
+function refreshInstallPanels() {
+  if (!elements.installPanels.length) {
+    return;
+  }
+
+  if (isStandaloneApp()) {
+    elements.installPanels.forEach((panel) => {
+      panel.hidden = true;
+      delete panel.dataset.installMode;
+    });
+    return;
+  }
+
+  let installMode = "manual";
+  let buttonLabel = "View Install Steps";
+  let note =
+    "Use your browser menu or address-bar install icon to add Tindahan Tracker like a phone app.";
+
+  if (deferredInstallPrompt) {
+    installMode = "prompt";
+    buttonLabel = "Install App";
+    note =
+      "Install Tindahan Tracker for one-tap access, faster loading, and a full-screen workspace on this device.";
+  } else if (isIosInstallableDevice()) {
+    installMode = "ios";
+    buttonLabel = "Home Screen Steps";
+    note = 'On iPhone or iPad, tap Share, then choose "Add to Home Screen" to install Tindahan Tracker.';
+  }
+
+  elements.installPanels.forEach((panel) => {
+    panel.hidden = false;
+    panel.dataset.installMode = installMode;
+  });
+
+  elements.installPanelNotes.forEach((installNote) => {
+    installNote.textContent = note;
+  });
+
+  elements.installButtons.forEach((button) => {
+    button.textContent = buttonLabel;
+  });
+}
+
+async function handleInstallButtonClick() {
+  if (isStandaloneApp()) {
+    announceInstallMessage("Tindahan Tracker is already installed on this device.", "success");
+    return;
+  }
+
+  if (deferredInstallPrompt) {
+    try {
+      await deferredInstallPrompt.prompt();
+      const choice = await deferredInstallPrompt.userChoice;
+
+      if (choice?.outcome === "accepted") {
+        announceInstallMessage("Install accepted. Tindahan Tracker will be added to this device.", "success");
+      } else {
+        announceInstallMessage("Install can still be completed later from this same screen.", "warning");
+      }
+    } catch (error) {
+      console.error("Unable to prompt for PWA install.", error);
+      announceInstallMessage("The install prompt could not be opened right now. Please try again.", "danger");
+    } finally {
+      deferredInstallPrompt = null;
+      refreshInstallPanels();
+    }
+    return;
+  }
+
+  if (isIosInstallableDevice()) {
+    announceInstallMessage(
+      'On iPhone or iPad, tap Share and choose "Add to Home Screen" to install Tindahan Tracker.',
+      "warning"
+    );
+    return;
+  }
+
+  announceInstallMessage(
+    "Open your browser menu or the install icon in the address bar, then choose Install App or Add to Home Screen. If the option is missing, refresh once after the page finishes loading.",
+    "warning"
+  );
+}
+
+function announceInstallMessage(message, tone = "default") {
+  if (currentAccount) {
+    setFeedback(message, tone);
+    return;
+  }
+
+  if (currentAdmin) {
+    setAdminFeedback(message, tone);
+    return;
+  }
+
+  setAuthMessage(message, tone);
+}
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in window.navigator)) {
+    return;
+  }
+
+  try {
+    await window.navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`);
+  } catch (error) {
+    console.warn("Unable to register the service worker.", error);
+  }
 }
 
 function setAuthMode(mode) {

@@ -8,7 +8,16 @@
     name="description"
     content="Track sari-sari store products, store-owner logins, and administrative monitoring in one formal dashboard."
   >
-  <link rel="stylesheet" href="styles.css?v=20260329g">
+  <meta name="theme-color" content="#204f86">
+  <meta name="application-name" content="Tindahan Tracker">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Tindahan Tracker">
+  <link rel="manifest" href="manifest.webmanifest?v=20260329h">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css?v=20260329h">
 </head>
 <body>
   <section class="auth-shell" id="auth-shell">
@@ -188,6 +197,14 @@
           </form>
 
           <p class="auth-message" id="auth-message">Register a store account to begin using the shared inventory workspace.</p>
+
+          <div class="install-panel" data-install-panel hidden>
+            <div class="install-copy">
+              <p class="eyebrow">Install App</p>
+              <p data-install-note>Add Tindahan Tracker to your phone home screen for faster opening and a more app-like workspace.</p>
+            </div>
+            <button class="button soft" data-install-button type="button">Install App</button>
+          </div>
         </div>
       </section>
     </div>
@@ -240,6 +257,14 @@
         </div>
 
         <p class="feedback-message" id="feedback-message">The inventory workspace is ready.</p>
+
+        <div class="install-panel compact" data-install-panel hidden>
+          <div class="install-copy">
+            <p class="eyebrow">Mobile Access</p>
+            <p data-install-note>Install Tindahan Tracker on this device for one-tap access and a phone-friendly full-screen view.</p>
+          </div>
+          <button class="button soft" data-install-button type="button">Install App</button>
+        </div>
 
         <div class="recovery-banner" id="recovery-banner" hidden>
           <div class="recovery-copy">
@@ -1062,6 +1087,6 @@
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqaGZ1ZGJpZ2l2ZGt5c3N5eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDAwMjYsImV4cCI6MjA5MDI3NjAyNn0.IVkYuKz903sm7UiE2x3VtJhiDE20pO1t_-AJfHIXteI",
     };
   </script>
-  <script src="script.js?v=20260329g"></script>
+  <script src="script.js?v=20260329h"></script>
 </body>
 </html>
