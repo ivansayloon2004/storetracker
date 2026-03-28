@@ -582,7 +582,11 @@ async function syncCloudInterface() {
     return;
   }
 
-  const profile = await ensureCloudProfile(authSession.user);
+  await syncCloudInterfaceForUser(authSession.user);
+}
+
+async function syncCloudInterfaceForUser(user) {
+  const profile = await ensureCloudProfile(user);
   if (!profile) {
     session = null;
     currentAccount = null;
@@ -1677,7 +1681,7 @@ async function handleLoginSubmit(event) {
   const password = elements.loginPassword.value;
 
   if (cloudMode) {
-    const { error } = await supabaseClient.auth.signInWithPassword({
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
       email,
       password,
     });
@@ -1688,7 +1692,11 @@ async function handleLoginSubmit(event) {
     }
 
     elements.loginPassword.value = "";
-    await syncInterface();
+    if (data?.user || data?.session?.user) {
+      await syncCloudInterfaceForUser(data.user || data.session.user);
+    } else {
+      await syncInterface();
+    }
     if (currentAccount) {
       setFeedback(`Welcome back, ${currentAccount.ownerName}.`, "success");
     } else if (currentAdmin) {
@@ -1862,7 +1870,11 @@ async function handleAdminSubmit(event) {
     }
 
     elements.adminLoginPassword.value = "";
-    await syncInterface();
+    if (data?.user || data?.session?.user) {
+      await syncCloudInterfaceForUser(data.user || data.session.user);
+    } else {
+      await syncInterface();
+    }
     setAdminFeedback(`Welcome back, ${profile.owner_name || "Administrator"}.`, "success");
     return;
   }
