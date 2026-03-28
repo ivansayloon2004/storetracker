@@ -57,6 +57,7 @@ let authMessageTimer;
 let adminFeedbackTimer;
 let scanStream = null;
 let scanDetector = null;
+let activeScannerContext = null;
 let scanFrameId = 0;
 let scanLoopBusy = false;
 let lastScannedCode = "";
@@ -123,11 +124,25 @@ const elements = {
   productCategory: document.querySelector("#product-category"),
   productUnit: document.querySelector("#product-unit"),
   productPrice: document.querySelector("#product-price"),
+  productCostPrice: document.querySelector("#product-cost-price"),
   productStock: document.querySelector("#product-stock"),
   productReorder: document.querySelector("#product-reorder"),
   productSku: document.querySelector("#product-sku"),
+  productImageUrl: document.querySelector("#product-image-url"),
+  productPhotoPreviewThumb: document.querySelector("#product-photo-preview-thumb"),
+  productPhotoPreviewNote: document.querySelector("#product-photo-preview-note"),
   productSubmit: document.querySelector("#product-submit"),
   productClear: document.querySelector("#product-clear"),
+  productScanMode: document.querySelector("#product-scan-mode"),
+  productScanQuantity: document.querySelector("#product-scan-quantity"),
+  productScanStatus: document.querySelector("#product-scan-status"),
+  productScannerVideo: document.querySelector("#product-scanner-video"),
+  productScannerPlaceholder: document.querySelector("#product-scanner-placeholder"),
+  productScannerStart: document.querySelector("#product-scanner-start"),
+  productScannerStop: document.querySelector("#product-scanner-stop"),
+  productScannerManualForm: document.querySelector("#product-scanner-manual-form"),
+  productScannerCodeInput: document.querySelector("#product-scanner-code-input"),
+  productScannerLastResult: document.querySelector("#product-scanner-last-result"),
   scannerVideo: document.querySelector("#scanner-video"),
   scannerPlaceholder: document.querySelector("#scanner-placeholder"),
   scannerStart: document.querySelector("#scanner-start"),
@@ -141,8 +156,14 @@ const elements = {
   saleForm: document.querySelector("#sale-form"),
   saleProduct: document.querySelector("#sale-product"),
   saleQuantity: document.querySelector("#sale-quantity"),
+  saleCustomerName: document.querySelector("#sale-customer-name"),
   saleNote: document.querySelector("#sale-note"),
   salePreview: document.querySelector("#sale-preview"),
+  salePrintLatest: document.querySelector("#sale-print-latest"),
+  saleLatestReceiptNumber: document.querySelector("#sale-latest-receipt-number"),
+  saleLatestReceiptCustomer: document.querySelector("#sale-latest-receipt-customer"),
+  saleLatestReceiptTotal: document.querySelector("#sale-latest-receipt-total"),
+  saleLatestReceiptProfit: document.querySelector("#sale-latest-receipt-profit"),
   restockForm: document.querySelector("#restock-form"),
   restockProduct: document.querySelector("#restock-product"),
   restockQuantity: document.querySelector("#restock-quantity"),
@@ -150,6 +171,7 @@ const elements = {
   restockPreview: document.querySelector("#restock-preview"),
   debtForm: document.querySelector("#debt-form"),
   debtCustomerName: document.querySelector("#debt-customer-name"),
+  debtCustomerOptions: document.querySelector("#debt-customer-options"),
   debtType: document.querySelector("#debt-type"),
   debtAmount: document.querySelector("#debt-amount"),
   debtNote: document.querySelector("#debt-note"),
@@ -167,9 +189,14 @@ const elements = {
   expenseMonthTotal: document.querySelector("#expense-month-total"),
   expenseLastCategory: document.querySelector("#expense-last-category"),
   expenseRecentList: document.querySelector("#expense-recent-list"),
+  reorderUrgentCount: document.querySelector("#reorder-urgent-count"),
+  reorderSuggestedValue: document.querySelector("#reorder-suggested-value"),
+  reorderPriorityItem: document.querySelector("#reorder-priority-item"),
   reorderBoard: document.querySelector("#reorder-board"),
   hotSellers: document.querySelector("#hot-sellers"),
+  profitLeaders: document.querySelector("#profit-leaders"),
   categoryMix: document.querySelector("#category-mix"),
+  weeklySalesTrend: document.querySelector("#weekly-sales-trend"),
   financeTodayProfit: document.querySelector("#finance-today-profit"),
   financeTodaySales: document.querySelector("#finance-today-sales"),
   financeTodayExpenses: document.querySelector("#finance-today-expenses"),
@@ -193,6 +220,9 @@ const elements = {
   reportMonthlySales: document.querySelector("#report-monthly-sales"),
   reportMonthlyExpenses: document.querySelector("#report-monthly-expenses"),
   reportMonthlyUnits: document.querySelector("#report-monthly-units"),
+  reportWeeklyTrend: document.querySelector("#report-weekly-trend"),
+  reportMonthlyTrend: document.querySelector("#report-monthly-trend"),
+  receiptList: document.querySelector("#receipt-list"),
   recentActivity: document.querySelector("#recent-activity"),
   exportData: document.querySelector("#export-data"),
   importTrigger: document.querySelector("#import-trigger"),
@@ -247,8 +277,11 @@ function setupSegmentedTabs() {
 }
 
 function activateTab(group, targetId) {
-  if (group === "store-ops" && targetId !== "ops-scan") {
-    stopCameraScanner({ silent: true });
+  if (group === "store-ops" && scanStream) {
+    const activeTab = activeScannerContext === "product" ? "ops-product" : "ops-scan";
+    if (targetId !== activeTab) {
+      stopCameraScanner({ silent: true });
+    }
   }
 
   const buttons = document.querySelectorAll(`[data-tab-group="${group}"]`);
@@ -311,8 +344,18 @@ function setupEventListeners() {
 
   elements.productForm.addEventListener("submit", handleProductSubmit);
   elements.productClear.addEventListener("click", resetProductForm);
+  elements.productImageUrl.addEventListener("input", renderProductPhotoPreview);
+  elements.productScanMode.addEventListener("change", updateProductScanGuidance);
+  elements.productScanQuantity.addEventListener("input", updateProductScanGuidance);
+  elements.productScannerStart.addEventListener("click", () => {
+    void startCameraScanner("product");
+  });
+  elements.productScannerStop.addEventListener("click", () => {
+    stopCameraScanner();
+  });
+  elements.productScannerManualForm.addEventListener("submit", handleProductScannerManualSubmit);
   elements.scannerStart.addEventListener("click", () => {
-    void startCameraScanner();
+    void startCameraScanner("inventory");
   });
   elements.scannerStop.addEventListener("click", () => {
     stopCameraScanner();
@@ -326,10 +369,13 @@ function setupEventListeners() {
   elements.expenseForm.addEventListener("submit", handleExpenseSubmit);
   elements.saleProduct.addEventListener("change", updateSalePreview);
   elements.saleQuantity.addEventListener("input", updateSalePreview);
+  elements.saleCustomerName.addEventListener("input", updateSalePreview);
   elements.restockProduct.addEventListener("change", updateRestockPreview);
   elements.restockQuantity.addEventListener("input", updateRestockPreview);
   elements.inventoryBody.addEventListener("click", handleInventoryActions);
   elements.reorderBoard.addEventListener("click", handleReorderActions);
+  elements.salePrintLatest.addEventListener("click", printLatestReceipt);
+  elements.receiptList.addEventListener("click", handleReceiptActions);
   elements.exportData.addEventListener("click", exportState);
   elements.importTrigger.addEventListener("click", () => elements.importFile.click());
   elements.importFile.addEventListener("change", importStateFromFile);
@@ -566,12 +612,12 @@ async function loadCloudStateForUser(userId, storeName) {
   const [productsResult, transactionsResult, activityResult, debtsResult, expensesResult] = await Promise.all([
     supabaseClient
       .from("products")
-      .select("id, user_id, sku, name, category, unit, price, stock, reorder_level, updated_at, created_at")
+      .select("*")
       .eq("user_id", userId)
       .order("updated_at", { ascending: false }),
     supabaseClient
       .from("transactions")
-      .select("id, user_id, type, product_id, product_name, quantity, unit, unit_price, total, note, occurred_at")
+      .select("*")
       .eq("user_id", userId)
       .order("occurred_at", { ascending: false })
       .limit(160),
@@ -638,10 +684,10 @@ async function loadCloudAdminWorkspace() {
       .order("created_at", { ascending: false }),
     supabaseClient
       .from("products")
-      .select("id, user_id, sku, name, category, unit, price, stock, reorder_level, updated_at, created_at"),
+      .select("*"),
     supabaseClient
       .from("transactions")
-      .select("id, user_id, type, product_id, product_name, quantity, unit, unit_price, total, note, occurred_at")
+      .select("*")
       .order("occurred_at", { ascending: false })
       .limit(2000),
     supabaseClient
@@ -753,8 +799,10 @@ function mapDatabaseProduct(row) {
     category: row.category,
     unit: row.unit,
     price: roundMoney(row.price),
+    costPrice: resolveCostPrice(row.cost_price, row.price),
     stock: roundNumber(row.stock),
     reorderLevel: roundNumber(row.reorder_level),
+    imageUrl: sanitizeImageUrl(row.image_url),
     updatedAt: normalizeDate(row.updated_at),
   };
 }
@@ -768,7 +816,15 @@ function mapDatabaseTransaction(row) {
     quantity: roundNumber(row.quantity),
     unit: row.unit,
     unitPrice: roundMoney(row.unit_price),
+    unitCost: resolveCostPrice(row.unit_cost, row.unit_price),
+    costTotal: roundMoney(row.cost_total ?? roundNumber(row.quantity) * resolveCostPrice(row.unit_cost, row.unit_price)),
+    profitAmount: roundMoney(
+      row.profit_amount ??
+        roundMoney(row.total) - roundMoney(row.cost_total ?? roundNumber(row.quantity) * resolveCostPrice(row.unit_cost, row.unit_price))
+    ),
     total: roundMoney(row.total),
+    customerName: `${row.customer_name || ""}`.trim(),
+    receiptNumber: `${row.receipt_number || ""}`.trim(),
     note: `${row.note || ""}`.trim(),
     occurredAt: normalizeDate(row.occurred_at),
   };
@@ -1077,6 +1133,7 @@ function buildDefaultState() {
       category: "Canned Goods",
       unit: "can",
       price: 27.5,
+      costPrice: 19.5,
       stock: 36,
       reorderLevel: 15,
       minutesAgo: 180,
@@ -1088,6 +1145,7 @@ function buildDefaultState() {
       category: "Noodles",
       unit: "pack",
       price: 18,
+      costPrice: 11.5,
       stock: 52,
       reorderLevel: 20,
       minutesAgo: 140,
@@ -1099,6 +1157,7 @@ function buildDefaultState() {
       category: "Staples",
       unit: "kg",
       price: 56,
+      costPrice: 43,
       stock: 24,
       reorderLevel: 10,
       minutesAgo: 280,
@@ -1110,6 +1169,7 @@ function buildDefaultState() {
       category: "Beverages",
       unit: "sachet",
       price: 14,
+      costPrice: 8.5,
       stock: 64,
       reorderLevel: 24,
       minutesAgo: 50,
@@ -1121,6 +1181,7 @@ function buildDefaultState() {
       category: "Personal Care",
       unit: "sachet",
       price: 8,
+      costPrice: 4.75,
       stock: 18,
       reorderLevel: 22,
       minutesAgo: 24,
@@ -1132,6 +1193,7 @@ function buildDefaultState() {
       category: "Beverages",
       unit: "bottle",
       price: 72,
+      costPrice: 53,
       stock: 12,
       reorderLevel: 8,
       minutesAgo: 95,
@@ -1143,6 +1205,7 @@ function buildDefaultState() {
       category: "Fresh Goods",
       unit: "piece",
       price: 9,
+      costPrice: 6,
       stock: 30,
       reorderLevel: 24,
       minutesAgo: 18,
@@ -1150,9 +1213,9 @@ function buildDefaultState() {
   ];
 
   const transactions = [
-    buildTransaction("sale", products[3], 6, "Morning coffee rush", 135),
-    buildTransaction("sale", products[6], 12, "Breakfast buyers", 75),
-    buildTransaction("sale", products[0], 4, "Lunch items", 55),
+    buildTransaction("sale", products[3], 6, "Morning coffee rush", 135, { customerName: "Walk-in customer" }),
+    buildTransaction("sale", products[6], 12, "Breakfast buyers", 75, { customerName: "Mang Jose" }),
+    buildTransaction("sale", products[0], 4, "Lunch items", 55, { customerName: "Aling Rosa" }),
     buildTransaction("restock", products[4], 20, "Weekly supplier refill", 26 * 60),
     buildTransaction("restock", products[1], 24, "Added noodle packs", 14 * 60),
   ];
@@ -1195,13 +1258,18 @@ function buildProduct(product) {
     category: `${product.category || "General"}`.trim(),
     unit: `${product.unit || "pc"}`.trim(),
     price: roundNumber(product.price),
+    costPrice: resolveCostPrice(product.costPrice, product.price),
     stock: roundNumber(product.stock),
     reorderLevel: roundNumber(product.reorderLevel),
+    imageUrl: sanitizeImageUrl(product.imageUrl),
     updatedAt: minutesAgoToIso(product.minutesAgo || 0),
   };
 }
 
-function buildTransaction(type, product, quantity, note, minutesAgo) {
+function buildTransaction(type, product, quantity, note, minutesAgo, options = {}) {
+  const unitCost = resolveCostPrice(options.unitCost, product.costPrice ?? product.price);
+  const total = roundMoney(quantity * product.price);
+  const costTotal = roundMoney(quantity * unitCost);
   return {
     id: uid("txn"),
     type,
@@ -1210,7 +1278,12 @@ function buildTransaction(type, product, quantity, note, minutesAgo) {
     quantity: roundNumber(quantity),
     unit: product.unit,
     unitPrice: roundNumber(product.price),
-    total: roundMoney(quantity * product.price),
+    unitCost,
+    costTotal,
+    profitAmount: roundMoney(total - costTotal),
+    total,
+    customerName: `${options.customerName || ""}`.trim(),
+    receiptNumber: type === "sale" ? `${options.receiptNumber || buildReceiptNumber(minutesAgoToIso(minutesAgo || 0))}` : "",
     note: `${note || ""}`.trim(),
     occurredAt: minutesAgoToIso(minutesAgo),
   };
@@ -1284,8 +1357,10 @@ function normalizeProduct(product) {
     category: `${product.category || "General"}`.trim() || "General",
     unit: `${product.unit || "pc"}`.trim() || "pc",
     price: roundNumber(product.price),
+    costPrice: resolveCostPrice(product.costPrice, product.price),
     stock: roundNumber(product.stock),
     reorderLevel: roundNumber(product.reorderLevel),
+    imageUrl: sanitizeImageUrl(product.imageUrl),
     updatedAt: normalizeDate(product.updatedAt),
   };
 }
@@ -1310,7 +1385,21 @@ function normalizeTransaction(transaction) {
     quantity: roundNumber(transaction.quantity),
     unit: `${transaction.unit || "pc"}`.trim() || "pc",
     unitPrice: roundNumber(transaction.unitPrice),
+    unitCost: resolveCostPrice(transaction.unitCost, transaction.unitPrice),
+    costTotal: roundMoney(
+      transaction.costTotal ?? roundNumber(transaction.quantity) * resolveCostPrice(transaction.unitCost, transaction.unitPrice)
+    ),
+    profitAmount: roundMoney(
+      transaction.profitAmount ??
+        roundMoney(transaction.total) -
+          roundMoney(
+            transaction.costTotal ??
+              roundNumber(transaction.quantity) * resolveCostPrice(transaction.unitCost, transaction.unitPrice)
+          )
+    ),
     total: roundMoney(transaction.total),
+    customerName: `${transaction.customerName || ""}`.trim(),
+    receiptNumber: `${transaction.receiptNumber || ""}`.trim(),
     note: `${transaction.note || ""}`.trim(),
     occurredAt: normalizeDate(transaction.occurredAt),
   };
@@ -1771,14 +1860,19 @@ function resetAuthForms() {
 function resetAppForms() {
   resetProductForm();
   elements.saleForm.reset();
+  elements.salePrintLatest.disabled = true;
   elements.restockForm.reset();
   elements.debtForm.reset();
   elements.expenseForm.reset();
+  elements.productScanMode.value = "fill";
+  elements.productScanQuantity.value = "1";
+  elements.productScannerCodeInput.value = "";
   elements.scannerAction.value = "sale";
   elements.scannerQuantity.value = "1";
   elements.scannerCodeInput.value = "";
   updateSalePreview();
   updateRestockPreview();
+  updateProductScanGuidance();
   updateScannerGuidance();
 }
 
@@ -1790,20 +1884,26 @@ function renderAll() {
   document.title = `${currentAccount.storeName} | Tindahan Tracker`;
   renderAccountProfile();
   elements.todayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
+  populateDebtCustomerSuggestions();
+  renderProductPhotoPreview();
   renderStats();
   populateCategoryFilter();
   populateProductSelectors();
   renderInventory();
   renderReorderBoard();
   renderHotSellers();
+  renderProfitLeaders();
   renderCategoryMix();
+  renderWeeklySalesTrend();
   renderDebtPanel();
   renderExpensePanel();
   renderFinanceInsights();
   renderReportInsights();
+  renderReceiptInsights();
   renderRecentActivity();
   updateSalePreview();
   updateRestockPreview();
+  updateProductScanGuidance();
   updateScannerGuidance();
 }
 
@@ -1873,8 +1973,10 @@ async function persistCloudState(userId, storeState) {
     category: product.category,
     unit: product.unit,
     price: roundMoney(product.price),
+    cost_price: resolveCostPrice(product.costPrice, product.price),
     stock: roundNumber(product.stock),
     reorder_level: roundNumber(product.reorderLevel),
+    image_url: sanitizeImageUrl(product.imageUrl) || null,
     updated_at: normalizeDate(product.updatedAt),
   }));
   const transactionsPayload = normalizedState.transactions.map((transaction) => ({
@@ -1886,7 +1988,12 @@ async function persistCloudState(userId, storeState) {
     quantity: roundNumber(transaction.quantity),
     unit: transaction.unit,
     unit_price: roundMoney(transaction.unitPrice),
+    unit_cost: resolveCostPrice(transaction.unitCost, transaction.unitPrice),
+    cost_total: roundMoney(transaction.costTotal),
+    profit_amount: roundMoney(transaction.profitAmount),
     total: roundMoney(transaction.total),
+    customer_name: `${transaction.customerName || ""}`.trim(),
+    receipt_number: `${transaction.receiptNumber || ""}`.trim(),
     note: `${transaction.note || ""}`.trim(),
     occurred_at: normalizeDate(transaction.occurredAt),
   }));
@@ -2014,6 +2121,7 @@ function renderStats() {
     (transaction) => transaction.type === "sale" && isToday(transaction.occurredAt)
   );
   const todaySales = sum(todaySalesTransactions.map((transaction) => transaction.total));
+  const todayGrossProfit = sum(todaySalesTransactions.map((transaction) => transaction.profitAmount ?? 0));
   const lowStockItems = state.products.filter((product) => {
     const status = getProductStatus(product).key;
     return status === "reorder" || status === "out";
@@ -2025,7 +2133,7 @@ function renderStats() {
   elements.todaySales.textContent = currencyFormatter.format(todaySales);
   elements.todaySalesFoot.textContent = `${todaySalesTransactions.length} sale${
     todaySalesTransactions.length === 1 ? "" : "s"
-  } logged today`;
+  } logged today · Gross profit ${currencyFormatter.format(todayGrossProfit)}`;
   elements.lowStockCount.textContent = numberFormatter.format(lowStockItems.length);
   elements.lowStockFoot.textContent = lowStockItems.length
     ? `${lowStockItems.filter((item) => getProductStatus(item).key === "out").length} item(s) are out of stock`
@@ -2279,12 +2387,19 @@ function renderInventory() {
     elements.inventoryBody.innerHTML = products
       .map((product) => {
         const status = getProductStatus(product);
+        const suggestedRestock = getSuggestedRestockQuantity(product);
         return `
           <tr>
             <td>
-              <div class="product-cell">
-                <span class="product-name">${escapeHtml(product.name)}</span>
-                <span class="product-meta">${escapeHtml(product.sku ? `Code: ${product.sku}` : "No barcode or code")}</span>
+              <div class="product-row-head">
+                ${renderProductPhoto(product, "small")}
+                <div class="product-cell">
+                  <span class="product-name">${escapeHtml(product.name)}</span>
+                  <span class="product-meta">${escapeHtml(product.sku ? `Code: ${product.sku}` : "No barcode or code")}</span>
+                  <span class="product-meta">${escapeHtml(
+                    suggestedRestock > 0 ? `Suggested reorder: ${formatQuantity(suggestedRestock)} ${product.unit}` : "Stock is above the reorder target"
+                  )}</span>
+                </div>
               </div>
             </td>
             <td>
@@ -2293,7 +2408,13 @@ function renderInventory() {
                 <span class="product-meta">${escapeHtml(product.unit)}</span>
               </div>
             </td>
-            <td>${currencyFormatter.format(product.price)}</td>
+            <td>
+              <div class="product-cell">
+                <span>${currencyFormatter.format(product.price)}</span>
+                <span class="product-meta">Cost: ${currencyFormatter.format(product.costPrice)}</span>
+                <span class="product-meta">Margin: ${currencyFormatter.format(getProductMargin(product))}</span>
+              </div>
+            </td>
             <td>
               <div class="product-cell">
                 <span>${formatQuantity(product.stock)} ${escapeHtml(product.unit)}</span>
@@ -2332,6 +2453,9 @@ function renderReorderBoard() {
     });
 
   if (!lowStockProducts.length) {
+    elements.reorderUrgentCount.textContent = "0";
+    elements.reorderSuggestedValue.textContent = currencyFormatter.format(0);
+    elements.reorderPriorityItem.textContent = "No alerts";
     elements.reorderBoard.innerHTML = `
       <div class="empty-state">
         No products are currently below their reorder level.
@@ -2340,11 +2464,18 @@ function renderReorderBoard() {
     return;
   }
 
+  const suggestedValue = sum(
+    lowStockProducts.map((product) => getSuggestedRestockQuantity(product) * resolveCostPrice(product.costPrice, product.price))
+  );
+  elements.reorderUrgentCount.textContent = numberFormatter.format(lowStockProducts.length);
+  elements.reorderSuggestedValue.textContent = currencyFormatter.format(suggestedValue);
+  elements.reorderPriorityItem.textContent = lowStockProducts[0].name;
+
   elements.reorderBoard.innerHTML = lowStockProducts
     .slice(0, 6)
     .map((product) => {
       const status = getProductStatus(product);
-      const suggestedRestock = Math.max(roundNumber(product.reorderLevel * 2 - product.stock), product.reorderLevel);
+      const suggestedRestock = getSuggestedRestockQuantity(product);
       return `
         <article class="list-card">
           <strong>${escapeHtml(product.name)}</strong>
@@ -2355,7 +2486,9 @@ function renderReorderBoard() {
           </div>
           <div class="list-meta">
             <span>Suggested refill: ${formatQuantity(suggestedRestock)} ${escapeHtml(product.unit)}</span>
-            <span>Price: ${currencyFormatter.format(product.price)}</span>
+            <span>Reorder cost: ${currencyFormatter.format(
+              suggestedRestock * resolveCostPrice(product.costPrice, product.price)
+            )}</span>
           </div>
           <button class="mini-button" type="button" data-action="edit" data-product-id="${escapeHtml(product.id)}">
             Update Item
@@ -2483,6 +2616,19 @@ function renderDebtPanel() {
           <div class="list-meta">
             <span>Charged: ${currencyFormatter.format(summary.charged)}</span>
             <span>Paid: ${currencyFormatter.format(summary.paid)}</span>
+          </div>
+          <div class="history-stack">
+            ${summary.recentEntries
+              .map(
+                (entry) => `
+                  <div class="history-row">
+                    <span>${escapeHtml(entry.type === "payment" ? "Payment" : "Charge")}</span>
+                    <span>${currencyFormatter.format(entry.amount)}</span>
+                    <span>${dateTimeFormatter.format(new Date(entry.occurredAt))}</span>
+                  </div>
+                `
+              )
+              .join("")}
           </div>
         </article>
       `
@@ -2619,6 +2765,274 @@ function renderReportInsights() {
   elements.reportMonthlySales.textContent = `Sales: ${currencyFormatter.format(monthly.sales)}`;
   elements.reportMonthlyExpenses.textContent = `Expenses: ${currencyFormatter.format(monthly.expenses)}`;
   elements.reportMonthlyUnits.textContent = `Units sold: ${formatQuantity(monthly.unitsSold)}`;
+
+  renderTrendBars(elements.reportWeeklyTrend, getDailySalesTrend(7), {
+    emptyMessage: "Daily sales movement will appear here after your first week of recorded sales.",
+    valueLabel: "Sales",
+  });
+  renderTrendBars(elements.reportMonthlyTrend, getCurrentMonthSalesTrend(), {
+    emptyMessage: "Monthly sales movement will appear here once this month has recorded sales.",
+    valueLabel: "Sales",
+  });
+}
+
+function renderProductPhotoPreview() {
+  const imageUrl = sanitizeImageUrl(elements.productImageUrl.value);
+  if (!imageUrl) {
+    elements.productPhotoPreviewThumb.className = "product-photo-thumb large";
+    elements.productPhotoPreviewThumb.innerHTML = "No photo";
+    elements.productPhotoPreviewNote.textContent =
+      "Add a photo URL to show a product image on the inventory board and receipts.";
+    return;
+  }
+
+  elements.productPhotoPreviewThumb.className = "product-photo-thumb large has-image";
+  elements.productPhotoPreviewThumb.innerHTML = `<img src="${escapeHtml(imageUrl)}" alt="Product preview">`;
+  elements.productPhotoPreviewNote.textContent = "Product photo is ready for the catalog, receipts, and analytics panels.";
+}
+
+function renderProfitLeaders() {
+  const profitLeaders = [...getProductPerformanceSummaries()]
+    .sort((left, right) => right.profit - left.profit || right.revenue - left.revenue)
+    .slice(0, 5);
+
+  if (!profitLeaders.length) {
+    elements.profitLeaders.innerHTML = `
+      <div class="empty-state">
+        Profit leaders will appear here once you start recording sales with cost prices.
+      </div>
+    `;
+    return;
+  }
+
+  elements.profitLeaders.innerHTML = profitLeaders
+    .map(
+      (entry) => `
+        <article class="list-card">
+          <strong>${escapeHtml(entry.name)}</strong>
+          <div class="list-meta">
+            <span>Gross profit: ${currencyFormatter.format(entry.profit)}</span>
+            <span>Revenue: ${currencyFormatter.format(entry.revenue)}</span>
+          </div>
+          <div class="list-meta">
+            <span>Units sold: ${formatQuantity(entry.quantity)} ${escapeHtml(entry.unit)}</span>
+            <span>Margin: ${currencyFormatter.format(entry.marginPerUnit)} per ${escapeHtml(entry.unit)}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderWeeklySalesTrend() {
+  renderTrendBars(elements.weeklySalesTrend, getDailySalesTrend(7), {
+    emptyMessage: "Weekly sales trend will appear here after you start logging sales.",
+    valueLabel: "Sales",
+  });
+}
+
+function renderReceiptInsights() {
+  const sales = getSaleTransactions();
+  const latestSale = sales[0];
+
+  if (!latestSale) {
+    elements.saleLatestReceiptNumber.textContent = "No sale receipt yet";
+    elements.saleLatestReceiptCustomer.textContent = "Customer: Walk-in";
+    elements.saleLatestReceiptTotal.textContent = "Total: PHP 0.00";
+    elements.saleLatestReceiptProfit.textContent = "Gross profit: PHP 0.00";
+    elements.salePrintLatest.disabled = true;
+    elements.receiptList.innerHTML = `
+      <div class="empty-state">
+        Receipts will appear here as soon as you start recording sales.
+      </div>
+    `;
+    return;
+  }
+
+  elements.saleLatestReceiptNumber.textContent = latestSale.receiptNumber || "Pending receipt number";
+  elements.saleLatestReceiptCustomer.textContent = `Customer: ${latestSale.customerName || "Walk-in customer"}`;
+  elements.saleLatestReceiptTotal.textContent = `Total: ${currencyFormatter.format(latestSale.total)}`;
+  elements.saleLatestReceiptProfit.textContent = `Gross profit: ${currencyFormatter.format(latestSale.profitAmount)}`;
+  elements.salePrintLatest.disabled = false;
+
+  elements.receiptList.innerHTML = sales
+    .slice(0, 10)
+    .map(
+      (transaction) => `
+        <article class="list-card receipt-card">
+          <div class="receipt-card-head">
+            <strong>${escapeHtml(transaction.receiptNumber || "Pending receipt number")}</strong>
+            <button class="mini-button" type="button" data-receipt-id="${escapeHtml(transaction.id)}">Print Receipt</button>
+          </div>
+          <div class="list-meta">
+            <span>${escapeHtml(transaction.customerName || "Walk-in customer")}</span>
+            <span>${dateTimeFormatter.format(new Date(transaction.occurredAt))}</span>
+          </div>
+          <div class="list-meta">
+            <span>${escapeHtml(transaction.productName)}</span>
+            <span>${formatQuantity(transaction.quantity)} ${escapeHtml(transaction.unit)}</span>
+          </div>
+          <div class="list-meta">
+            <span>Total: ${currencyFormatter.format(transaction.total)}</span>
+            <span>Gross profit: ${currencyFormatter.format(transaction.profitAmount)}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function handleReceiptActions(event) {
+  const button = event.target.closest("button[data-receipt-id]");
+  if (!button) {
+    return;
+  }
+
+  printReceiptById(button.dataset.receiptId);
+}
+
+function printLatestReceipt() {
+  const latestSale = getSaleTransactions()[0];
+  if (!latestSale) {
+    return;
+  }
+
+  printReceiptById(latestSale.id);
+}
+
+function printReceiptById(transactionId) {
+  const transaction = state.transactions.find((entry) => entry.id === transactionId && entry.type === "sale");
+  if (!transaction || !currentAccount) {
+    setFeedback("That receipt is no longer available.", "warning");
+    return;
+  }
+
+  const receiptWindow = window.open("", "_blank", "width=760,height=900");
+  if (!receiptWindow) {
+    setFeedback("The browser blocked the receipt window. Allow pop-ups and try again.", "warning");
+    return;
+  }
+
+  receiptWindow.document.write(buildReceiptDocument(transaction));
+  receiptWindow.document.close();
+  receiptWindow.focus();
+  receiptWindow.print();
+}
+
+function populateDebtCustomerSuggestions() {
+  const customerNames = [...new Set(state.debts.map((entry) => entry.customerName.trim()).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right)
+  );
+
+  if (!elements.debtCustomerOptions) {
+    return;
+  }
+
+  elements.debtCustomerOptions.replaceChildren();
+  customerNames.forEach((customerName) => {
+    const option = document.createElement("option");
+    option.value = customerName;
+    elements.debtCustomerOptions.append(option);
+  });
+}
+
+function renderProductPhoto(product, size = "small") {
+  const className = size === "large" ? "product-photo-thumb large" : "product-photo-thumb";
+  const imageUrl = sanitizeImageUrl(product.imageUrl);
+  if (!imageUrl) {
+    return `<div class="${className}" aria-hidden="true">${escapeHtml(getProductInitials(product.name))}</div>`;
+  }
+
+  return `<div class="${className} has-image"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(product.name)}"></div>`;
+}
+
+function buildReceiptDocument(transaction) {
+  const storeName = escapeHtml(currentAccount.storeName);
+  const ownerName = escapeHtml(currentAccount.ownerName);
+  const customerName = escapeHtml(transaction.customerName || "Walk-in customer");
+  const productName = escapeHtml(transaction.productName);
+  const unit = escapeHtml(transaction.unit);
+  const note = escapeHtml(transaction.note || "No note recorded");
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(transaction.receiptNumber || "Sale receipt")} | ${storeName}</title>
+    <style>
+      body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; padding: 32px; color: #172334; background: #f4f7fb; }
+      .receipt-shell { max-width: 760px; margin: 0 auto; background: #ffffff; border-radius: 24px; padding: 32px; box-shadow: 0 16px 40px rgba(23, 35, 52, 0.12); }
+      .receipt-head { display: flex; justify-content: space-between; gap: 24px; align-items: start; margin-bottom: 24px; }
+      .receipt-title { font: 700 32px Cambria, Georgia, serif; margin: 0 0 8px; }
+      .receipt-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #204f86; font-weight: 700; }
+      .receipt-meta { display: grid; gap: 6px; color: #5a6778; font-size: 14px; }
+      .receipt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+      .receipt-card { border: 1px solid rgba(23, 35, 52, 0.08); border-radius: 18px; padding: 16px; background: #f8fbff; }
+      .receipt-card strong { display: block; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a6778; margin-bottom: 8px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+      th, td { padding: 14px 12px; border-bottom: 1px solid rgba(23, 35, 52, 0.08); text-align: left; }
+      th { background: #edf3f9; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #5a6778; }
+      .receipt-total { display: grid; gap: 8px; margin-left: auto; max-width: 320px; }
+      .receipt-total div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid rgba(23, 35, 52, 0.08); }
+      .receipt-total div:last-child { font-weight: 700; color: #173c67; border-bottom: 0; font-size: 18px; }
+      .receipt-note { margin-top: 24px; padding: 16px; border-radius: 16px; background: #f6f8fb; color: #5a6778; }
+      @media print { body { background: #fff; padding: 0; } .receipt-shell { box-shadow: none; border-radius: 0; max-width: none; } }
+    </style>
+  </head>
+  <body>
+    <main class="receipt-shell">
+      <section class="receipt-head">
+        <div>
+          <div class="receipt-label">Store receipt</div>
+          <h1 class="receipt-title">${storeName}</h1>
+          <div class="receipt-meta">
+            <span>Owner: ${ownerName}</span>
+            <span>Receipt no.: ${escapeHtml(transaction.receiptNumber || "Pending receipt number")}</span>
+            <span>Issued: ${escapeHtml(dateTimeFormatter.format(new Date(transaction.occurredAt)))}</span>
+          </div>
+        </div>
+        <div class="receipt-meta">
+          <span>Customer: ${customerName}</span>
+          <span>Recorded via Tindahan Tracker</span>
+        </div>
+      </section>
+      <section class="receipt-grid">
+        <div class="receipt-card">
+          <strong>Customer</strong>
+          <span>${customerName}</span>
+        </div>
+        <div class="receipt-card">
+          <strong>Gross profit</strong>
+          <span>${escapeHtml(currencyFormatter.format(transaction.profitAmount))}</span>
+        </div>
+      </section>
+      <table>
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Unit price</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>${productName}</td>
+            <td>${escapeHtml(formatQuantity(transaction.quantity))} ${unit}</td>
+            <td>${escapeHtml(currencyFormatter.format(transaction.unitPrice))}</td>
+            <td>${escapeHtml(currencyFormatter.format(transaction.total))}</td>
+          </tr>
+        </tbody>
+      </table>
+      <section class="receipt-total">
+        <div><span>Cost of goods</span><span>${escapeHtml(currencyFormatter.format(transaction.costTotal))}</span></div>
+        <div><span>Gross profit</span><span>${escapeHtml(currencyFormatter.format(transaction.profitAmount))}</span></div>
+        <div><span>Amount due</span><span>${escapeHtml(currencyFormatter.format(transaction.total))}</span></div>
+      </section>
+      <div class="receipt-note">Note: ${note}</div>
+    </main>
+  </body>
+</html>`;
 }
 
 function renderRecentActivity() {
@@ -2661,9 +3075,11 @@ async function handleProductSubmit(event) {
     category: elements.productCategory.value.trim(),
     unit: elements.productUnit.value.trim(),
     price: roundMoney(elements.productPrice.value),
+    costPrice: resolveCostPrice(elements.productCostPrice.value, elements.productPrice.value),
     stock: roundNumber(elements.productStock.value),
     reorderLevel: roundNumber(elements.productReorder.value),
     sku: normalizeCode(elements.productSku.value),
+    imageUrl: sanitizeImageUrl(elements.productImageUrl.value),
     updatedAt: new Date().toISOString(),
   };
 
@@ -2672,8 +3088,13 @@ async function handleProductSubmit(event) {
     return;
   }
 
-  if (product.stock < 0 || product.price < 0 || product.reorderLevel < 0) {
-    setFeedback("Stock, price, and reorder level cannot be negative.", "danger");
+  if (product.stock < 0 || product.price < 0 || product.costPrice < 0 || product.reorderLevel < 0) {
+    setFeedback("Stock, selling price, cost price, and reorder level cannot be negative.", "danger");
+    return;
+  }
+
+  if (product.costPrice > product.price) {
+    setFeedback("Cost price should not be higher than the selling price for profit tracking.", "danger");
     return;
   }
 
@@ -2717,6 +3138,12 @@ async function recordSale(product, quantity, note, options = {}) {
 
   product.stock = roundNumber(product.stock - quantity);
   product.updatedAt = new Date().toISOString();
+  const receiptNumber = `${options.receiptNumber || buildReceiptNumber()}`;
+  const customerName = `${options.customerName || ""}`.trim();
+  const unitCost = resolveCostPrice(product.costPrice, product.price);
+  const costTotal = roundMoney(quantity * unitCost);
+  const total = roundMoney(quantity * product.price);
+  const profitAmount = roundMoney(total - costTotal);
 
   state.transactions.unshift({
     id: uid("txn"),
@@ -2726,7 +3153,12 @@ async function recordSale(product, quantity, note, options = {}) {
     quantity,
     unit: product.unit,
     unitPrice: product.price,
-    total: roundMoney(quantity * product.price),
+    unitCost,
+    costTotal,
+    profitAmount,
+    total,
+    customerName,
+    receiptNumber,
     note,
     occurredAt: new Date().toISOString(),
   });
@@ -2741,7 +3173,7 @@ async function recordSale(product, quantity, note, options = {}) {
     return { ok: false, message: "The sale could not be synchronized to the shared workspace." };
   }
 
-  return { ok: true, product };
+  return { ok: true, product, receiptNumber };
 }
 
 async function recordRestock(product, quantity, note, options = {}) {
@@ -2755,6 +3187,8 @@ async function recordRestock(product, quantity, note, options = {}) {
 
   product.stock = roundNumber(product.stock + quantity);
   product.updatedAt = new Date().toISOString();
+  const unitCost = resolveCostPrice(product.costPrice, product.price);
+  const costTotal = roundMoney(quantity * unitCost);
 
   state.transactions.unshift({
     id: uid("txn"),
@@ -2764,7 +3198,12 @@ async function recordRestock(product, quantity, note, options = {}) {
     quantity,
     unit: product.unit,
     unitPrice: product.price,
+    unitCost,
+    costTotal,
+    profitAmount: 0,
     total: roundMoney(quantity * product.price),
+    customerName: "",
+    receiptNumber: "",
     note,
     occurredAt: new Date().toISOString(),
   });
@@ -2787,15 +3226,17 @@ async function handleSaleSubmit(event) {
 
   const product = getProductById(elements.saleProduct.value);
   const quantity = roundNumber(elements.saleQuantity.value);
+  const customerName = elements.saleCustomerName.value.trim();
   const note = elements.saleNote.value.trim();
 
-  const result = await recordSale(product, quantity, note);
+  const result = await recordSale(product, quantity, note, { customerName });
   if (!result.ok) {
     setFeedback(result.message, "danger");
     return;
   }
 
   elements.saleForm.reset();
+  elements.salePrintLatest.disabled = false;
   updateSalePreview();
 }
 
@@ -2962,7 +3403,7 @@ function handleReorderActions(event) {
   startEditingProduct(button.dataset.productId);
 }
 
-function startEditingProduct(productId) {
+function startEditingProduct(productId, options = {}) {
   const product = getProductById(productId);
 
   if (!product) {
@@ -2978,10 +3419,17 @@ function startEditingProduct(productId) {
   elements.productCategory.value = product.category;
   elements.productUnit.value = product.unit;
   elements.productPrice.value = product.price;
+  elements.productCostPrice.value = product.costPrice;
   elements.productStock.value = product.stock;
   elements.productReorder.value = product.reorderLevel;
   elements.productSku.value = product.sku;
-  elements.productForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  elements.productImageUrl.value = product.imageUrl;
+  elements.productScannerLastResult.textContent = `Editing ${product.name}. Scan a new barcode to update its code, or switch the product-tab scanner to restock mode to add more stock here.`;
+  renderProductPhotoPreview();
+
+  if (options.scroll !== false) {
+    elements.productForm.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 async function deleteProduct(productId) {
@@ -3011,11 +3459,18 @@ function resetProductForm() {
   elements.productId.value = "";
   elements.productFormTitle.textContent = "Add a product";
   elements.productSubmit.textContent = "Save Product";
+  elements.productScanMode.value = "fill";
+  elements.productScanQuantity.value = "1";
+  elements.productScannerCodeInput.value = "";
+  elements.productScannerLastResult.textContent = "No product-tab barcode action has been recorded yet.";
+  renderProductPhotoPreview();
+  updateProductScanGuidance();
 }
 
 function updateSalePreview() {
   const product = getProductById(elements.saleProduct.value);
   const quantity = roundNumber(elements.saleQuantity.value);
+  const customerName = elements.saleCustomerName.value.trim();
 
   if (!product) {
     elements.salePreview.textContent = "Choose a product to preview the sale amount.";
@@ -3023,13 +3478,18 @@ function updateSalePreview() {
   }
 
   if (quantity <= 0) {
-    elements.salePreview.textContent = `${product.name} sells for ${currencyFormatter.format(product.price)} each. ${formatQuantity(product.stock)} ${product.unit} in stock.`;
+    elements.salePreview.textContent = `${product.name} sells for ${currencyFormatter.format(product.price)} each with estimated gross profit of ${currencyFormatter.format(
+      getProductMargin(product)
+    )} per ${product.unit}. ${formatQuantity(product.stock)} ${product.unit} in stock.`;
     return;
   }
 
   const total = roundMoney(quantity * product.price);
+  const grossProfit = roundMoney(quantity * getProductMargin(product));
   const remaining = roundNumber(product.stock - quantity);
-  elements.salePreview.textContent = `Sale total: ${currencyFormatter.format(total)}. Stock after sale: ${formatQuantity(
+  elements.salePreview.textContent = `Receipt total: ${currencyFormatter.format(total)}. Gross profit: ${currencyFormatter.format(
+    grossProfit
+  )}. ${customerName ? `${customerName} will appear on the receipt.` : "Walk-in customer will be used on the receipt."} Stock after sale: ${formatQuantity(
     Math.max(remaining, 0)
   )} ${product.unit}.`;
 }
@@ -3048,9 +3508,11 @@ function updateRestockPreview() {
     return;
   }
 
+  const addedCost = roundMoney(quantity * product.costPrice);
+  const addedRetail = roundMoney(quantity * product.price);
   elements.restockPreview.textContent = `New stock after restock: ${formatQuantity(product.stock + quantity)} ${
     product.unit
-  }. Added value: ${currencyFormatter.format(quantity * product.price)}.`;
+  }. Added capital: ${currencyFormatter.format(addedCost)}. Added retail value: ${currencyFormatter.format(addedRetail)}.`;
 }
 
 async function handleScannerManualSubmit(event) {
@@ -3058,11 +3520,49 @@ async function handleScannerManualSubmit(event) {
 
   const code = normalizeCode(elements.scannerCodeInput.value);
   if (!code) {
-    setScannerStatus("Enter or scan a barcode before processing the code.", "warning");
+    setScannerStatus("Enter or scan a barcode before processing the code.", "warning", "inventory");
     return;
   }
 
-  await processScannedCode(code, "manual");
+  await processScannedCode(code, "manual", "inventory");
+}
+
+async function handleProductScannerManualSubmit(event) {
+  event.preventDefault();
+
+  const code = normalizeCode(elements.productScannerCodeInput.value);
+  if (!code) {
+    setScannerStatus("Enter or scan a barcode before processing the code.", "warning", "product");
+    return;
+  }
+
+  await processScannedCode(code, "manual", "product");
+}
+
+function getScannerContext(contextName = activeScannerContext || "inventory") {
+  if (contextName === "product") {
+    return {
+      name: "product",
+      video: elements.productScannerVideo,
+      placeholder: elements.productScannerPlaceholder,
+      startButton: elements.productScannerStart,
+      stopButton: elements.productScannerStop,
+      status: elements.productScanStatus,
+      codeInput: elements.productScannerCodeInput,
+      lastResult: elements.productScannerLastResult,
+    };
+  }
+
+  return {
+    name: "inventory",
+    video: elements.scannerVideo,
+    placeholder: elements.scannerPlaceholder,
+    startButton: elements.scannerStart,
+    stopButton: elements.scannerStop,
+    status: elements.scannerStatus,
+    codeInput: elements.scannerCodeInput,
+    lastResult: elements.scannerLastSale,
+  };
 }
 
 function getScannerSettings() {
@@ -3072,32 +3572,76 @@ function getScannerSettings() {
   };
 }
 
+function getProductScanSettings() {
+  return {
+    mode: elements.productScanMode.value === "restock" ? "restock" : "fill",
+    quantity: roundNumber(elements.productScanQuantity.value || 1),
+  };
+}
+
 function updateScannerGuidance() {
   const { mode, quantity } = getScannerSettings();
   const isRestock = mode === "restock";
   const quantityLabel = formatQuantity(Math.max(quantity, 0));
-  elements.scannerStatus.textContent = isRestock
+  const context = getScannerContext("inventory");
+  context.status.textContent = isRestock
     ? `Every recognized barcode will restock ${quantityLabel} item(s). Save the product barcode first, then scan to add stock automatically.`
     : `Every recognized barcode will record ${quantityLabel} item(s) sold. Save the product barcode first, then scan to reduce stock automatically.`;
-  delete elements.scannerStatus.dataset.tone;
+  delete context.status.dataset.tone;
 }
 
-function setScannerStatus(message, tone = "default") {
-  elements.scannerStatus.textContent = message;
+function updateProductScanGuidance() {
+  const { mode, quantity } = getProductScanSettings();
+  const quantityLabel = formatQuantity(Math.max(quantity, 0));
+  const context = getScannerContext("product");
+  context.status.textContent =
+    mode === "restock"
+      ? `Every recognized barcode will restock ${quantityLabel} item(s) for the matching saved product and refresh the form above with the updated stock.`
+      : "Every recognized barcode will fill the Barcode or product code field in the product form above.";
+  delete context.status.dataset.tone;
+}
+
+function setScannerStatus(message, tone = "default", contextName = activeScannerContext || "inventory") {
+  const context = getScannerContext(contextName);
+  context.status.textContent = message;
 
   if (tone === "default") {
-    delete elements.scannerStatus.dataset.tone;
+    delete context.status.dataset.tone;
   } else {
-    elements.scannerStatus.dataset.tone = tone;
+    context.status.dataset.tone = tone;
   }
 }
 
-function updateScannerSurface() {
-  const isActive = Boolean(scanStream);
-  elements.scannerVideo.hidden = !isActive;
-  elements.scannerPlaceholder.hidden = isActive;
-  elements.scannerStart.disabled = isActive;
-  elements.scannerStop.disabled = !isActive;
+function updateScannerSurfaces() {
+  ["inventory", "product"].forEach((contextName) => {
+    const context = getScannerContext(contextName);
+    const isActive = Boolean(scanStream) && activeScannerContext === contextName;
+
+    context.video.hidden = !isActive;
+    context.placeholder.hidden = isActive;
+    context.startButton.disabled = Boolean(scanStream);
+    context.stopButton.disabled = !isActive;
+  });
+}
+
+function getScannerStartMessage(contextName) {
+  if (contextName === "product") {
+    const { mode, quantity } = getProductScanSettings();
+    return mode === "restock"
+      ? `Product scanner is active. Each recognized code will restock ${formatQuantity(quantity)} item(s) for the matching saved product.`
+      : "Product scanner is active. Each recognized code will fill the Barcode or product code field above.";
+  }
+
+  const { mode, quantity } = getScannerSettings();
+  return `Camera scanner is active. Each recognized code will ${mode === "restock" ? "restock" : "sell"} ${formatQuantity(
+    quantity
+  )} item(s).`;
+}
+
+function getScannerStopMessage(contextName) {
+  return contextName === "product"
+    ? "Product-tab scanner is off. Start the camera when you are ready to scan another barcode from this form."
+    : "Camera scanner is off. Start the camera when you are ready to scan again.";
 }
 
 async function buildScanDetector() {
@@ -3119,20 +3663,24 @@ async function buildScanDetector() {
   }
 }
 
-async function startCameraScanner() {
+async function startCameraScanner(contextName = "inventory") {
   if (!currentAccount) {
     return;
   }
 
-  activateTab("store-ops", "ops-scan");
+  activateTab("store-ops", contextName === "product" ? "ops-product" : "ops-scan");
 
-  if (scanStream) {
-    setScannerStatus("Camera scanner is already active.", "success");
+  if (scanStream && activeScannerContext === contextName) {
+    setScannerStatus("Camera scanner is already active.", "success", contextName);
     return;
   }
 
+  if (scanStream) {
+    stopCameraScanner({ silent: true });
+  }
+
   if (!navigator.mediaDevices?.getUserMedia) {
-    setScannerStatus("This browser cannot open the camera. Use manual barcode entry instead.", "warning");
+    setScannerStatus("This browser cannot open the camera. Use manual barcode entry instead.", "warning", contextName);
     return;
   }
 
@@ -3140,7 +3688,8 @@ async function startCameraScanner() {
   if (!scanDetector) {
     setScannerStatus(
       "Live camera scanning is not available on this browser. Use manual barcode entry or a handheld scanner.",
-      "warning"
+      "warning",
+      contextName
     );
     return;
   }
@@ -3155,24 +3704,20 @@ async function startCameraScanner() {
       },
     });
 
-    elements.scannerVideo.srcObject = scanStream;
-    await elements.scannerVideo.play();
+    activeScannerContext = contextName;
+    const context = getScannerContext(contextName);
+    context.video.srcObject = scanStream;
+    await context.video.play();
     scanLoopBusy = false;
     lastScannedCode = "";
     lastScannedAt = 0;
-    updateScannerSurface();
-    const { mode, quantity } = getScannerSettings();
-    setScannerStatus(
-      `Camera scanner is active. Each recognized code will ${mode === "restock" ? "restock" : "sell"} ${formatQuantity(
-        quantity
-      )} item(s).`,
-      "success"
-    );
+    updateScannerSurfaces();
+    setScannerStatus(getScannerStartMessage(contextName), "success", contextName);
     queueScanFrame();
   } catch (error) {
     console.error("Unable to start barcode scanner.", error);
     stopCameraScanner({ silent: true });
-    setScannerStatus("Camera access was not granted. Allow camera access and try again.", "danger");
+    setScannerStatus("Camera access was not granted. Allow camera access and try again.", "danger", contextName);
   }
 }
 
@@ -3195,7 +3740,8 @@ async function scanFrame() {
     return;
   }
 
-  if (scanLoopBusy || elements.scannerVideo.readyState < 2) {
+  const context = getScannerContext(activeScannerContext || "inventory");
+  if (scanLoopBusy || context.video.readyState < 2) {
     queueScanFrame();
     return;
   }
@@ -3203,7 +3749,7 @@ async function scanFrame() {
   scanLoopBusy = true;
 
   try {
-    const barcodes = await scanDetector.detect(elements.scannerVideo);
+    const barcodes = await scanDetector.detect(context.video);
     if (Array.isArray(barcodes) && barcodes.length) {
       const code = normalizeCode(barcodes[0].rawValue);
       const now = Date.now();
@@ -3211,7 +3757,7 @@ async function scanFrame() {
       if (code && (code !== lastScannedCode || now - lastScannedAt > 1600)) {
         lastScannedCode = code;
         lastScannedAt = now;
-        await processScannedCode(code, "camera");
+        await processScannedCode(code, "camera", context.name);
       }
     }
   } catch (error) {
@@ -3223,6 +3769,8 @@ async function scanFrame() {
 }
 
 function stopCameraScanner(options = {}) {
+  const previousContext = activeScannerContext || "inventory";
+
   if (scanFrameId) {
     window.cancelAnimationFrame(scanFrameId);
     scanFrameId = 0;
@@ -3232,35 +3780,42 @@ function stopCameraScanner(options = {}) {
   scanDetector = null;
   lastScannedCode = "";
   lastScannedAt = 0;
+  activeScannerContext = null;
 
-  if (elements.scannerVideo.srcObject) {
-    const mediaStream = elements.scannerVideo.srcObject;
-    mediaStream.getTracks().forEach((track) => track.stop());
-    elements.scannerVideo.srcObject = null;
-  }
+  ["inventory", "product"].forEach((contextName) => {
+    const context = getScannerContext(contextName);
+    if (context.video.srcObject) {
+      context.video.srcObject = null;
+    }
+  });
 
   if (scanStream) {
     scanStream.getTracks().forEach((track) => track.stop());
     scanStream = null;
   }
 
-  updateScannerSurface();
+  updateScannerSurfaces();
 
   if (!options.silent) {
-    setScannerStatus("Camera scanner is off. Start the camera when you are ready to scan again.");
+    setScannerStatus(getScannerStopMessage(previousContext), "default", previousContext);
   }
 }
 
-async function processScannedCode(rawCode, source) {
+async function processScannedCode(rawCode, source, contextName = activeScannerContext || "inventory") {
   const code = normalizeCode(rawCode);
   if (!code) {
-    setScannerStatus("A valid barcode is required before a scan can be recorded.", "warning");
+    setScannerStatus("A valid barcode is required before a scan can be recorded.", "warning", contextName);
+    return;
+  }
+
+  if (contextName === "product") {
+    await processProductTabCode(code, source);
     return;
   }
 
   const { mode, quantity } = getScannerSettings();
   if (quantity <= 0) {
-    setScannerStatus("Quantity per scan must be greater than zero before scanning.", "warning");
+    setScannerStatus("Quantity per scan must be greater than zero before scanning.", "warning", "inventory");
     return;
   }
 
@@ -3268,7 +3823,8 @@ async function processScannedCode(rawCode, source) {
   if (!product) {
     setScannerStatus(
       `No product matches code ${code}. Save that barcode in the product code field first.`,
-      "danger"
+      "danger",
+      "inventory"
     );
     elements.scannerLastSale.textContent = `Last scanned code: ${code}. No matching product was found.`;
     elements.scannerCodeInput.value = "";
@@ -3288,7 +3844,7 @@ async function processScannedCode(rawCode, source) {
         });
 
   if (!result.ok) {
-    setScannerStatus(result.message, "danger");
+    setScannerStatus(result.message, "danger", "inventory");
     elements.scannerLastSale.textContent =
       mode === "restock"
         ? `${product.name} was not restocked. Review the scanner settings and try again.`
@@ -3301,7 +3857,8 @@ async function processScannedCode(rawCode, source) {
     mode === "restock"
       ? `${product.name} restocked successfully. ${formatQuantity(product.stock)} ${product.unit} now on hand.`
       : `${product.name} recorded successfully. ${formatQuantity(product.stock)} ${product.unit} remaining.`,
-    "success"
+    "success",
+    "inventory"
   );
   elements.scannerLastSale.textContent =
     mode === "restock"
@@ -3312,6 +3869,75 @@ async function processScannedCode(rawCode, source) {
           product.stock
         )} ${product.unit}`;
   elements.scannerCodeInput.value = "";
+}
+
+async function processProductTabCode(code, source) {
+  const { mode, quantity } = getProductScanSettings();
+  const currentProductId = elements.productId.value.trim();
+
+  if (mode === "fill") {
+    const matchingProduct = getProductByCode(code);
+    elements.productSku.value = code;
+    elements.productScannerCodeInput.value = "";
+
+    if (matchingProduct && matchingProduct.id !== currentProductId) {
+      setScannerStatus(
+        `${code} already belongs to ${matchingProduct.name}. Review that item before saving another product with the same barcode.`,
+        "warning",
+        "product"
+      );
+      elements.productScannerLastResult.textContent = `Barcode ${code} matches existing product ${matchingProduct.name}.`;
+      return;
+    }
+
+    setScannerStatus(`Barcode ${code} was added to the product form.`, "success", "product");
+    elements.productScannerLastResult.textContent =
+      source === "camera"
+        ? `Camera scan captured ${code} and placed it in the product code field.`
+        : `Manual code ${code} was placed in the product code field.`;
+    return;
+  }
+
+  if (quantity <= 0) {
+    setScannerStatus("Restock quantity per scan must be greater than zero before scanning.", "warning", "product");
+    return;
+  }
+
+  const product = getProductByCode(code);
+  if (!product) {
+    setScannerStatus(
+      `No saved product matches code ${code}. Save the product first, then use restock mode.`,
+      "danger",
+      "product"
+    );
+    elements.productScannerLastResult.textContent = `Last scanned code: ${code}. No matching saved product was found.`;
+    elements.productScannerCodeInput.value = "";
+    return;
+  }
+
+  const entryLabel = `${source === "camera" ? "Camera" : "Manual"} product-tab barcode scan: ${code}`;
+  const result = await recordRestock(product, quantity, entryLabel, {
+    activityMessage: `Recorded product-tab barcode restock for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
+    feedbackMessage: `${product.name} was restocked from the product tab.`,
+  });
+
+  if (!result.ok) {
+    setScannerStatus(result.message, "danger", "product");
+    elements.productScannerLastResult.textContent = `${product.name} was not restocked. Review the scanner settings and try again.`;
+    elements.productScannerCodeInput.value = "";
+    return;
+  }
+
+  startEditingProduct(product.id, { scroll: false });
+  setScannerStatus(
+    `${product.name} restocked successfully. ${formatQuantity(product.stock)} ${product.unit} now on hand.`,
+    "success",
+    "product"
+  );
+  elements.productScannerLastResult.textContent = `${product.name} | Code: ${code} | Added: ${formatQuantity(
+    quantity
+  )} ${product.unit} | New stock: ${formatQuantity(product.stock)} ${product.unit}`;
+  elements.productScannerCodeInput.value = "";
 }
 
 function exportState() {
@@ -3514,6 +4140,137 @@ function getProductByCode(code) {
   return state.products.find((product) => normalizeCode(product.sku) === normalizedCode) || null;
 }
 
+function getProductMargin(product) {
+  return roundMoney(roundMoney(product.price) - resolveCostPrice(product.costPrice, product.price));
+}
+
+function getSuggestedRestockQuantity(product) {
+  return Math.max(roundNumber(product.reorderLevel * 2 - product.stock), product.reorderLevel);
+}
+
+function getSaleTransactions() {
+  return [...state.transactions]
+    .filter((transaction) => transaction.type === "sale")
+    .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+}
+
+function getProductPerformanceSummaries() {
+  const summaries = new Map();
+
+  getSaleTransactions().forEach((transaction) => {
+    const current = summaries.get(transaction.productId) || {
+      id: transaction.productId,
+      name: transaction.productName,
+      unit: transaction.unit,
+      quantity: 0,
+      revenue: 0,
+      profit: 0,
+      marginPerUnit: roundMoney(roundMoney(transaction.unitPrice) - resolveCostPrice(transaction.unitCost, transaction.unitPrice)),
+    };
+
+    current.quantity += transaction.quantity;
+    current.revenue += transaction.total;
+    current.profit += transaction.profitAmount ?? 0;
+    summaries.set(transaction.productId, current);
+  });
+
+  return [...summaries.values()].map((entry) => ({
+    ...entry,
+    quantity: roundNumber(entry.quantity),
+    revenue: roundMoney(entry.revenue),
+    profit: roundMoney(entry.profit),
+  }));
+}
+
+function getDailySalesTrend(days) {
+  const trend = [];
+
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - offset);
+    const nextDate = new Date(date);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    const sales = state.transactions.filter((transaction) => {
+      if (transaction.type !== "sale") {
+        return false;
+      }
+
+      const occurred = new Date(transaction.occurredAt);
+      return occurred >= date && occurred < nextDate;
+    });
+
+    trend.push({
+      label: date.toLocaleDateString("en-PH", { month: "short", day: "numeric" }),
+      value: roundMoney(sum(sales.map((transaction) => transaction.total))),
+      subtitle: `${sales.length} sale${sales.length === 1 ? "" : "s"}`,
+    });
+  }
+
+  return trend;
+}
+
+function getCurrentMonthSalesTrend() {
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const trend = [];
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(today.getFullYear(), today.getMonth(), day);
+    const nextDate = new Date(today.getFullYear(), today.getMonth(), day + 1);
+    const sales = state.transactions.filter((transaction) => {
+      if (transaction.type !== "sale") {
+        return false;
+      }
+
+      const occurred = new Date(transaction.occurredAt);
+      return occurred >= date && occurred < nextDate;
+    });
+
+    trend.push({
+      label: `${day}`,
+      value: roundMoney(sum(sales.map((transaction) => transaction.total))),
+      subtitle: `${sales.length} sale${sales.length === 1 ? "" : "s"}`,
+    });
+  }
+
+  return trend.filter((entry) => entry.value > 0).slice(-12);
+}
+
+function renderTrendBars(container, entries, options = {}) {
+  const meaningfulEntries = entries.filter((entry) => entry.value > 0);
+  if (!meaningfulEntries.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        ${escapeHtml(options.emptyMessage || "Trend data will appear here once you record more activity.")}
+      </div>
+    `;
+    return;
+  }
+
+  const highestValue = meaningfulEntries[0]
+    ? Math.max(...meaningfulEntries.map((entry) => entry.value), 1)
+    : 1;
+
+  container.innerHTML = meaningfulEntries
+    .map(
+      (entry) => `
+        <div class="bar-row">
+          <div class="bar-header">
+            <span>${escapeHtml(entry.label)}</span>
+            <span>${currencyFormatter.format(entry.value)}</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill" style="width: ${(entry.value / highestValue) * 100}%"></div>
+          </div>
+          <div class="trend-meta">${escapeHtml(entry.subtitle || `${options.valueLabel || "Value"} logged`)}</div>
+        </div>
+      `
+    )
+    .join("");
+}
+
 function getCategorySummaries() {
   const totals = new Map();
 
@@ -3537,6 +4294,7 @@ function getDebtCustomerSummaries() {
       paid: 0,
       balance: 0,
       lastOccurredAt: entry.occurredAt,
+      recentEntries: [],
     };
 
     if (entry.type === "payment") {
@@ -3551,6 +4309,13 @@ function getDebtCustomerSummaries() {
       current.lastOccurredAt = entry.occurredAt;
     }
 
+    current.recentEntries.push({
+      type: entry.type,
+      amount: roundMoney(entry.amount),
+      note: entry.note,
+      occurredAt: entry.occurredAt,
+    });
+
     summaries.set(key, current);
   });
 
@@ -3560,6 +4325,9 @@ function getDebtCustomerSummaries() {
       charged: roundMoney(summary.charged),
       paid: roundMoney(summary.paid),
       balance: roundMoney(Math.max(summary.balance, 0)),
+      recentEntries: summary.recentEntries
+        .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt))
+        .slice(0, 3),
     }))
     .sort((left, right) => right.balance - left.balance || new Date(right.lastOccurredAt) - new Date(left.lastOccurredAt));
 }
@@ -3579,13 +4347,15 @@ function getExpenseCategorySummaries() {
 function getFinancialSummary(filterFn) {
   const sales = state.transactions.filter((transaction) => transaction.type === "sale" && filterFn(transaction.occurredAt));
   const expenses = state.expenses.filter((expense) => filterFn(expense.occurredAt));
+  const grossProfit = sum(sales.map((transaction) => transaction.profitAmount ?? 0));
+  const totalSales = sum(sales.map((transaction) => transaction.total));
+  const totalExpenses = sum(expenses.map((expense) => expense.amount));
 
   return {
-    sales: sum(sales.map((transaction) => transaction.total)),
-    expenses: sum(expenses.map((expense) => expense.amount)),
-    profit: roundMoney(
-      sum(sales.map((transaction) => transaction.total)) - sum(expenses.map((expense) => expense.amount))
-    ),
+    sales: totalSales,
+    expenses: totalExpenses,
+    grossProfit: roundMoney(grossProfit),
+    profit: roundMoney(grossProfit - totalExpenses),
     unitsSold: sum(sales.map((transaction) => transaction.quantity)),
     saleCount: sales.length,
     expenseCount: expenses.length,

@@ -372,8 +372,20 @@
                 </label>
 
                 <label class="field">
+                  <span>Cost price (PHP)</span>
+                  <input id="product-cost-price" type="number" min="0" step="0.01" placeholder="0.00" required>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
                   <span>Current stock</span>
                   <input id="product-stock" type="number" min="0" step="0.01" placeholder="0" required>
+                </label>
+
+                <label class="field">
+                  <span>Product photo URL</span>
+                  <input id="product-image-url" type="url" maxlength="500" placeholder="https://example.com/photo.jpg">
                 </label>
               </div>
 
@@ -389,11 +401,80 @@
                 </label>
               </div>
 
+              <div class="product-photo-preview-card">
+                <div class="product-photo-thumb large" id="product-photo-preview-thumb" aria-hidden="true">No photo</div>
+                <div class="product-photo-copy">
+                  <strong>Catalog preview</strong>
+                  <p id="product-photo-preview-note">Add a photo URL to show a product image on the inventory board and receipts.</p>
+                </div>
+              </div>
+
               <div class="form-actions">
                 <button class="button primary" id="product-submit" type="submit">Save Product</button>
                 <button class="button ghost" id="product-clear" type="button">Clear Form</button>
               </div>
             </form>
+
+            <section class="product-scan-panel" aria-labelledby="product-scan-title">
+              <div class="panel-head compact product-scan-head">
+                <div>
+                  <h4 class="tab-section-title" id="product-scan-title">Barcode tools</h4>
+                  <p class="section-intro">
+                    Stay on this product tab to scan a barcode into the form or restock an existing saved item without switching to the separate scan page.
+                  </p>
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Product-tab scan action</span>
+                  <select id="product-scan-mode">
+                    <option value="fill">Fill barcode field</option>
+                    <option value="restock">Restock existing product</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Restock quantity per scan</span>
+                  <input id="product-scan-quantity" type="number" min="0.01" step="0.01" value="1">
+                </label>
+              </div>
+
+              <div class="scanner-stage scanner-stage-compact">
+                <video class="scanner-video" id="product-scanner-video" autoplay playsinline muted hidden></video>
+                <div class="scanner-placeholder" id="product-scanner-placeholder">
+                  Product-tab camera preview appears here after you start the scanner.
+                </div>
+              </div>
+
+              <div class="scan-actions">
+                <button class="button soft" id="product-scanner-start" type="button">Start Product Scanner</button>
+                <button class="button ghost" id="product-scanner-stop" type="button" disabled>Stop Scanner</button>
+              </div>
+
+              <p class="form-preview" id="product-scan-status">
+                Scan a barcode to fill the product code field above, or switch to restock mode to add stock to a saved product directly from this tab.
+              </p>
+
+              <form class="scan-manual-form" id="product-scanner-manual-form">
+                <label class="field">
+                  <span>Manual code entry</span>
+                  <input
+                    id="product-scanner-code-input"
+                    type="text"
+                    maxlength="60"
+                    placeholder="Scan with a handheld scanner or type the barcode"
+                    autocomplete="off"
+                  >
+                </label>
+
+                <button class="button ghost" type="submit">Process Code</button>
+              </form>
+
+              <p class="scanner-last-sale" id="product-scanner-last-result">
+                No product-tab barcode action has been recorded yet.
+              </p>
+            </section>
           </div>
 
           <div class="tab-panel" id="ops-sale" data-tab-panel="store-ops" hidden>
@@ -411,14 +492,32 @@
               </label>
 
               <label class="field">
+                <span>Customer name</span>
+                <input id="sale-customer-name" type="text" maxlength="80" placeholder="Optional walk-in or suki name">
+              </label>
+
+              <label class="field">
                 <span>Note</span>
                 <input id="sale-note" type="text" maxlength="80" placeholder="Optional note">
               </label>
 
               <p class="form-preview" id="sale-preview">Choose a product to preview the sale amount.</p>
 
-              <button class="button primary" type="submit">Record Sale</button>
+              <div class="form-actions">
+                <button class="button primary" type="submit">Record Sale</button>
+                <button class="button ghost" id="sale-print-latest" type="button" disabled>Print Latest Receipt</button>
+              </div>
             </form>
+
+            <article class="report-card receipt-highlight-card">
+              <span class="report-label">Latest receipt</span>
+              <strong id="sale-latest-receipt-number">No sale receipt yet</strong>
+              <div class="report-meta">
+                <span id="sale-latest-receipt-customer">Customer: Walk-in</span>
+                <span id="sale-latest-receipt-total">Total: PHP 0.00</span>
+                <span id="sale-latest-receipt-profit">Gross profit: PHP 0.00</span>
+              </div>
+            </article>
           </div>
 
           <div class="tab-panel" id="ops-restock" data-tab-panel="store-ops" hidden>
@@ -507,7 +606,7 @@
               <div class="form-grid">
                 <label class="field">
                   <span>Customer name</span>
-                  <input id="debt-customer-name" type="text" maxlength="80" placeholder="Ex. Juan Dela Cruz" required>
+                  <input id="debt-customer-name" type="text" maxlength="80" placeholder="Ex. Juan Dela Cruz" list="debt-customer-options" required>
                 </label>
 
                 <label class="field">
@@ -535,6 +634,8 @@
 
               <button class="button primary" type="submit">Save Utang Entry</button>
             </form>
+
+            <datalist id="debt-customer-options"></datalist>
 
             <div class="summary-chip-grid">
               <article class="summary-chip">
@@ -621,6 +722,9 @@
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-reports">
               Reports
             </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-receipts">
+              Receipts
+            </button>
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-activity">
               Activity
             </button>
@@ -628,6 +732,20 @@
 
           <div class="tab-panel is-active" id="insight-alerts" data-tab-panel="store-insights">
             <p class="section-intro">Review the most urgent products requiring replenishment.</p>
+            <div class="summary-chip-grid compact-summary-grid">
+              <article class="summary-chip">
+                <span>Urgent alerts</span>
+                <strong id="reorder-urgent-count">0</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Suggested reorder value</span>
+                <strong id="reorder-suggested-value">PHP 0.00</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Priority item</span>
+                <strong id="reorder-priority-item">No alerts</strong>
+              </article>
+            </div>
             <div class="list-stack scroll-list" id="reorder-board"></div>
           </div>
 
@@ -642,6 +760,18 @@
               <div class="insight-section">
                 <h3>Category value mix</h3>
                 <div class="bar-stack" id="category-mix"></div>
+              </div>
+            </div>
+
+            <div class="insight-split">
+              <div class="insight-section">
+                <h3>Profit leaders</h3>
+                <div class="list-stack" id="profit-leaders"></div>
+              </div>
+
+              <div class="insight-section">
+                <h3>Weekly sales trend</h3>
+                <div class="bar-stack" id="weekly-sales-trend"></div>
               </div>
             </div>
           </div>
@@ -725,6 +855,23 @@
                 </div>
               </article>
             </div>
+
+            <div class="insight-split">
+              <div class="insight-section">
+                <h3>Last 7 days</h3>
+                <div class="bar-stack" id="report-weekly-trend"></div>
+              </div>
+
+              <div class="insight-section">
+                <h3>This month by day</h3>
+                <div class="bar-stack" id="report-monthly-trend"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" id="insight-receipts" data-tab-panel="store-insights" hidden>
+            <p class="section-intro">Open a printable summary for each recorded sale without leaving the dashboard.</p>
+            <div class="list-stack scroll-list" id="receipt-list"></div>
           </div>
 
           <div class="tab-panel" id="insight-activity" data-tab-panel="store-insights" hidden>
