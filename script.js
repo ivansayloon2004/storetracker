@@ -24,7 +24,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const CLOUD_SYNC_INTERVAL_MS = 8000;
-const APP_VERSION = "20260329j";
+const APP_VERSION = "20260329k";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -327,8 +327,40 @@ function setupPwaSupport() {
     refreshInstallPanels();
   });
 
+  void handleRequestedCacheFlush();
   void registerServiceWorker();
   refreshInstallPanels();
+}
+
+async function handleRequestedCacheFlush() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("flush") !== "1") {
+    return;
+  }
+
+  try {
+    if ("serviceWorker" in window.navigator) {
+      const registrations = await window.navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    }
+
+    if ("caches" in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+    }
+
+    params.delete("flush");
+    params.set("refreshed", APP_VERSION);
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`;
+    window.location.replace(nextUrl);
+  } catch (error) {
+    console.warn("Unable to clear the installed app cache automatically.", error);
+    announceInstallMessage(
+      "The app cache could not be cleared automatically. Use your browser site settings to clear stored data for this site.",
+      "warning"
+    );
+  }
 }
 
 function setupSegmentedTabs() {

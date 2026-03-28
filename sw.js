@@ -1,10 +1,10 @@
-const CACHE_NAME = "tindahan-tracker-shell-20260329j";
+const CACHE_NAME = "tindahan-tracker-shell-20260329k";
 const APP_SHELL_ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=20260329j",
-  "/script.js?v=20260329j",
-  "/manifest.webmanifest?v=20260329j",
+  "/styles.css?v=20260329k",
+  "/script.js?v=20260329k",
+  "/manifest.webmanifest?v=20260329k",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
@@ -72,18 +72,16 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-
-      return fetch(request).then((networkResponse) => {
+    fetch(request)
+      .then((networkResponse) => {
         if (networkResponse.ok) {
           const responseCopy = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, responseCopy));
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(async () => {
+        return (await caches.match(request)) || (await caches.match("/index.html"));
+      })
   );
 });
