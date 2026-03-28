@@ -61,6 +61,7 @@ const elements = {
   authShell: document.querySelector("#auth-shell"),
   appShell: document.querySelector("#app-shell"),
   adminShell: document.querySelector("#admin-shell"),
+  authTabs: document.querySelector("#auth-tabs"),
   loginTab: document.querySelector("#login-tab"),
   signupTab: document.querySelector("#signup-tab"),
   adminTab: document.querySelector("#admin-tab"),
@@ -219,6 +220,15 @@ function activateTab(group, targetId) {
 }
 
 function setupEventListeners() {
+  elements.authTabs?.addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-auth-mode]");
+    if (!tab) {
+      return;
+    }
+
+    setAuthMode(tab.dataset.authMode);
+  });
+
   elements.loginTab.addEventListener("click", () => setAuthMode("login"));
   elements.signupTab.addEventListener("click", () => setAuthMode("signup"));
   elements.adminTab.addEventListener("click", () => setAuthMode("admin"));

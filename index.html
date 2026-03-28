@@ -8,7 +8,7 @@
     name="description"
     content="Track sari-sari store products, store-owner logins, and administrative monitoring in one formal dashboard."
   >
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260328b">
 </head>
 <body>
   <section class="auth-shell" id="auth-shell">
@@ -46,14 +46,21 @@
       </section>
 
       <section class="panel auth-card">
-        <div class="auth-tabs auth-tabs-wide" role="tablist" aria-label="Authentication options">
-          <button class="auth-tab is-active" id="login-tab" type="button" role="tab" aria-selected="true">
+        <div class="auth-tabs auth-tabs-wide" id="auth-tabs" role="tablist" aria-label="Authentication options">
+          <button
+            class="auth-tab is-active"
+            id="login-tab"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            data-auth-mode="login"
+          >
             Log In
           </button>
-          <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false">
+          <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false" data-auth-mode="signup">
             Register Store
           </button>
-          <button class="auth-tab" id="admin-tab" type="button" role="tab" aria-selected="false">
+          <button class="auth-tab" id="admin-tab" type="button" role="tab" aria-selected="false" data-auth-mode="admin">
             Administrator
           </button>
         </div>
@@ -643,7 +650,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js"></script>
-  <script src="script.js"></script>
+  <script src="supabase-config.js?v=20260328b"></script>
+  <script src="script.js?v=20260328b"></script>
 </body>
 </html>
