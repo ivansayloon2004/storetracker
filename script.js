@@ -24,7 +24,7 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const CLOUD_SYNC_INTERVAL_MS = 8000;
-const APP_VERSION = "20260329i";
+const APP_VERSION = "20260329j";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -48,6 +48,19 @@ const cloudTableStatus = {
   debts: null,
   expenses: null,
 };
+const cloudColumnSupport = {
+  products: {
+    cost_price: true,
+    image_url: true,
+  },
+  transactions: {
+    unit_cost: true,
+    cost_total: true,
+    profit_amount: true,
+    customer_name: true,
+    receipt_number: true,
+  },
+};
 const filters = {
   search: "",
   category: "all",
@@ -69,6 +82,7 @@ let recoveryCandidate = null;
 let cloudSyncPollId = 0;
 let cloudSyncInFlight = false;
 let lastCloudSyncMarker = "";
+let lastCloudSaveErrorMessage = "";
 let deferredInstallPrompt = null;
 
 const elements = {
@@ -2554,7 +2568,7 @@ function renderAdminProfile() {
   elements.adminEmailDisplay.textContent = currentAdmin.email;
 }
 
-async function saveState() {
+async function saveState(options = {}) {
   if (!currentAccount) {
     return true;
   }
@@ -2563,7 +2577,7 @@ async function saveState() {
 
   if (cloudMode) {
     remoteStoreMap[currentAccount.id] = normalized;
-    return persistCloudState(currentAccount.id, normalized);
+    return persistCloudState(currentAccount.id, normalized, options);
   }
 
   const storeMap = loadStoreMap();
@@ -2572,7 +2586,197 @@ async function saveState() {
   return true;
 }
 
-async function persistCloudState(userId, storeState) {
+function buildCloudSavePlan(scope = "all") {
+  if (scope === "product") {
+    return {
+      products: true,
+      transactions: false,
+      debts: false,
+      expenses: false,
+      activity: true,
+    };
+  }
+
+  if (scope === "inventory-transaction") {
+    return {
+      products: true,
+      transactions: true,
+      debts: false,
+      expenses: false,
+      activity: true,
+    };
+  }
+
+  if (scope === "debt") {
+    return {
+      products: false,
+      transactions: false,
+      debts: true,
+      expenses: false,
+      activity: true,
+    };
+  }
+
+  if (scope === "expense") {
+    return {
+      products: false,
+      transactions: false,
+      debts: false,
+      expenses: true,
+      activity: true,
+    };
+  }
+
+  return {
+    products: true,
+    transactions: true,
+    debts: true,
+    expenses: true,
+    activity: true,
+  };
+}
+
+function buildCompatibleCloudRows(tableName, rows) {
+  const support = cloudColumnSupport[tableName];
+  if (!support) {
+    return rows;
+  }
+
+  return rows.map((row) => {
+    const nextRow = { ...row };
+    Object.entries(support).forEach(([columnName, isSupported]) => {
+      if (isSupported === false) {
+        delete nextRow[columnName];
+      }
+    });
+    return nextRow;
+  });
+}
+
+function applyMissingColumnFallback(tableName, error) {
+  const support = cloudColumnSupport[tableName];
+  if (!support) {
+    return false;
+  }
+
+  const errorText = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+  if (!errorText.includes("column") && !errorText.includes("schema cache")) {
+    return false;
+  }
+
+  const missingColumn = Object.keys(support).find((columnName) => {
+    return support[columnName] !== false && errorText.includes(columnName.toLowerCase());
+  });
+
+  if (!missingColumn) {
+    return false;
+  }
+
+  support[missingColumn] = false;
+  return true;
+}
+
+function describeCloudSaveError(error, fallbackMessage) {
+  const errorText = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`.toLowerCase();
+
+  if (isMissingTableError(error)) {
+    return "Your Supabase tables are incomplete for this feature. Run the latest supabase-setup.sql, then try again.";
+  }
+
+  if (errorText.includes("schema cache") || errorText.includes("column")) {
+    return "Your Supabase database schema is outdated for this feature. Run the latest supabase-setup.sql, then try again.";
+  }
+
+  if (error?.code === "42501" || errorText.includes("row-level security")) {
+    return "This store account does not have permission to update the shared workspace right now.";
+  }
+
+  if (errorText.includes("duplicate key")) {
+    return "A shared record with the same ID already exists. Refresh once, then try again.";
+  }
+
+  return fallbackMessage || error?.message || "The shared workspace rejected the update.";
+}
+
+function rememberCloudSaveError(error, fallbackMessage, logContext) {
+  if (logContext) {
+    console.error(logContext, error);
+  }
+  lastCloudSaveErrorMessage = describeCloudSaveError(error, fallbackMessage);
+}
+
+async function replaceCloudTableRows(tableName, userId, rows, options = {}) {
+  const { optionalStatusKey = "" } = options;
+
+  if (optionalStatusKey && cloudTableStatus[optionalStatusKey] === false && !rows.length) {
+    return true;
+  }
+
+  if (optionalStatusKey && cloudTableStatus[optionalStatusKey] === false && rows.length) {
+    lastCloudSaveErrorMessage = `Your Supabase workspace is still missing the ${tableName} table for this feature. Run the latest supabase-setup.sql, then try again.`;
+    return false;
+  }
+
+  const deleteResult = await supabaseClient.from(tableName).delete().eq("user_id", userId);
+  if (deleteResult.error) {
+    if (optionalStatusKey && isMissingTableError(deleteResult.error)) {
+      cloudTableStatus[optionalStatusKey] = false;
+      if (!rows.length) {
+        return true;
+      }
+      lastCloudSaveErrorMessage = `Your Supabase workspace is still missing the ${tableName} table for this feature. Run the latest supabase-setup.sql, then try again.`;
+      return false;
+    }
+
+    rememberCloudSaveError(
+      deleteResult.error,
+      `The shared ${tableName} records could not be cleared before saving.`,
+      `Unable to clear shared ${tableName} rows before save.`
+    );
+    return false;
+  }
+
+  if (optionalStatusKey) {
+    cloudTableStatus[optionalStatusKey] = true;
+  }
+
+  if (!rows.length) {
+    return true;
+  }
+
+  let compatibleRows = buildCompatibleCloudRows(tableName, rows);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const insertResult = await supabaseClient.from(tableName).insert(compatibleRows);
+    if (!insertResult.error) {
+      return true;
+    }
+
+    if (optionalStatusKey && isMissingTableError(insertResult.error)) {
+      cloudTableStatus[optionalStatusKey] = false;
+      lastCloudSaveErrorMessage = `Your Supabase workspace is still missing the ${tableName} table for this feature. Run the latest supabase-setup.sql, then try again.`;
+      return false;
+    }
+
+    if (applyMissingColumnFallback(tableName, insertResult.error)) {
+      compatibleRows = buildCompatibleCloudRows(tableName, rows);
+      continue;
+    }
+
+    rememberCloudSaveError(
+      insertResult.error,
+      `The shared ${tableName} records could not be saved.`,
+      `Unable to write shared ${tableName} rows.`
+    );
+    return false;
+  }
+
+  lastCloudSaveErrorMessage = `The shared ${tableName} records could not be saved with the current Supabase schema. Run the latest supabase-setup.sql, then try again.`;
+  return false;
+}
+
+async function persistCloudState(userId, storeState, options = {}) {
+  lastCloudSaveErrorMessage = "";
+  const syncPlan = buildCloudSavePlan(options.scope);
   const normalizedState = normalizeState(storeState);
   const productsPayload = normalizedState.products.map((product) => ({
     id: product.id,
@@ -2633,51 +2837,39 @@ async function persistCloudState(userId, storeState) {
     occurred_at: normalizeDate(activity.occurredAt),
   }));
 
-  const debtWrite = await syncOptionalCloudTable("debts", "debts", userId, debtsPayload);
-  if (!debtWrite) {
-    return false;
+  if (syncPlan.debts) {
+    const debtWrite = await syncOptionalCloudTable("debts", "debts", userId, debtsPayload);
+    if (!debtWrite) {
+      return false;
+    }
   }
 
-  const expenseWrite = await syncOptionalCloudTable("expenses", "expenses", userId, expensesPayload);
-  if (!expenseWrite) {
-    return false;
+  if (syncPlan.expenses) {
+    const expenseWrite = await syncOptionalCloudTable("expenses", "expenses", userId, expensesPayload);
+    if (!expenseWrite) {
+      return false;
+    }
   }
 
-  const [deleteProducts, deleteTransactions, deleteActivity] = await Promise.all([
-    supabaseClient.from("products").delete().eq("user_id", userId),
-    supabaseClient.from("transactions").delete().eq("user_id", userId),
-    supabaseClient.from("activity").delete().eq("user_id", userId),
-  ]);
-
-  if (deleteProducts.error || deleteTransactions.error || deleteActivity.error) {
-    console.error("Unable to clear existing cloud rows before save.", {
-      deleteProducts: deleteProducts.error,
-      deleteTransactions: deleteTransactions.error,
-      deleteActivity: deleteActivity.error,
-    });
-    return false;
+  if (syncPlan.products) {
+    const productWrite = await replaceCloudTableRows("products", userId, productsPayload);
+    if (!productWrite) {
+      return false;
+    }
   }
 
-  const writes = [];
-  if (productsPayload.length) {
-    writes.push(supabaseClient.from("products").insert(productsPayload));
-  }
-  if (transactionsPayload.length) {
-    writes.push(supabaseClient.from("transactions").insert(transactionsPayload));
-  }
-  if (activityPayload.length) {
-    writes.push(supabaseClient.from("activity").insert(activityPayload));
+  if (syncPlan.transactions) {
+    const transactionWrite = await replaceCloudTableRows("transactions", userId, transactionsPayload);
+    if (!transactionWrite) {
+      return false;
+    }
   }
 
-  if (!writes.length) {
-    return true;
-  }
-
-  const results = await Promise.all(writes);
-  const failed = results.find((result) => result.error);
-  if (failed) {
-    console.error("Unable to write cloud store data.", failed.error);
-    return false;
+  if (syncPlan.activity) {
+    const activityWrite = await replaceCloudTableRows("activity", userId, activityPayload);
+    if (!activityWrite) {
+      return false;
+    }
   }
 
   await updateCloudSyncMarker(userId);
@@ -2703,42 +2895,7 @@ async function updateCloudSyncMarker(userId) {
 }
 
 async function syncOptionalCloudTable(tableName, statusKey, userId, rows) {
-  if (cloudTableStatus[statusKey] === false && !rows.length) {
-    return true;
-  }
-
-  if (cloudTableStatus[statusKey] === false && rows.length) {
-    return false;
-  }
-
-  const deleteResult = await supabaseClient.from(tableName).delete().eq("user_id", userId);
-  if (deleteResult.error) {
-    if (isMissingTableError(deleteResult.error)) {
-      cloudTableStatus[statusKey] = false;
-      return !rows.length;
-    }
-
-    console.error(`Unable to clear shared ${tableName} rows before save.`, deleteResult.error);
-    return false;
-  }
-
-  cloudTableStatus[statusKey] = true;
-  if (!rows.length) {
-    return true;
-  }
-
-  const insertResult = await supabaseClient.from(tableName).insert(rows);
-  if (insertResult.error) {
-    if (isMissingTableError(insertResult.error)) {
-      cloudTableStatus[statusKey] = false;
-      return false;
-    }
-
-    console.error(`Unable to write shared ${tableName} rows.`, insertResult.error);
-    return false;
-  }
-
-  return true;
+  return replaceCloudTableRows(tableName, userId, rows, { optionalStatusKey: statusKey });
 }
 
 function renderStats() {
@@ -3754,7 +3911,7 @@ async function handleProductSubmit(event) {
   if (existingIndex >= 0) {
     state.products[existingIndex] = product;
     addActivity("product-updated", `Updated product details for ${product.name}.`, product);
-    if (await saveAndRefresh(`${product.name} was updated.`, "success")) {
+    if (await saveAndRefresh(`${product.name} was updated.`, "success", { scope: "product" })) {
       resetProductForm();
     } else {
       state = previousState;
@@ -3763,7 +3920,7 @@ async function handleProductSubmit(event) {
   } else {
     state.products.unshift(product);
     addActivity("product-created", `Added ${product.name} to your product list.`, product);
-    if (await saveAndRefresh(`${product.name} was added to inventory.`, "success")) {
+    if (await saveAndRefresh(`${product.name} was added to inventory.`, "success", { scope: "product" })) {
       resetProductForm();
     } else {
       state = previousState;
@@ -3820,7 +3977,9 @@ async function recordSale(product, quantity, note, options = {}) {
     options.activityMessage || `Logged sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
     product
   );
-  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} sale saved.`, "success");
+  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} sale saved.`, "success", {
+    scope: "inventory-transaction",
+  });
   if (!saved) {
     return { ok: false, message: "The sale could not be synchronized to the shared workspace." };
   }
@@ -3865,7 +4024,9 @@ async function recordRestock(product, quantity, note, options = {}) {
     options.activityMessage || `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
     product
   );
-  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} restock saved.`, "success");
+  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} restock saved.`, "success", {
+    scope: "inventory-transaction",
+  });
   if (!saved) {
     return { ok: false, message: "The restock could not be synchronized to the shared workspace." };
   }
@@ -3958,13 +4119,13 @@ async function handleDebtSubmit(event) {
     null
   );
 
-  const saved = await saveState();
+  const saved = await saveState({ scope: "debt" });
   if (!saved) {
     state = previousState;
     renderAll();
     setFeedback(
       cloudMode
-        ? "The utang entry could not be synchronized. Run the updated Supabase SQL before using this feature online."
+        ? lastCloudSaveErrorMessage || "The utang entry could not be synchronized. Run the updated Supabase SQL before using this feature online."
         : "The utang entry could not be saved right now.",
       "danger"
     );
@@ -4010,13 +4171,13 @@ async function handleExpenseSubmit(event) {
 
   addActivity("expense", `Saved ${category} expense worth ${currencyFormatter.format(amount)}.`, null);
 
-  const saved = await saveState();
+  const saved = await saveState({ scope: "expense" });
   if (!saved) {
     state = previousState;
     renderAll();
     setFeedback(
       cloudMode
-        ? "The expense entry could not be synchronized. Run the updated Supabase SQL before using this feature online."
+        ? lastCloudSaveErrorMessage || "The expense entry could not be synchronized. Run the updated Supabase SQL before using this feature online."
         : "The expense entry could not be saved right now.",
       "danger"
     );
@@ -4095,12 +4256,18 @@ async function deleteProduct(productId) {
     return;
   }
 
+  const previousState = normalizeState(state);
   state.products = state.products.filter((item) => item.id !== productId);
   addActivity("product-deleted", `Removed ${product.name} from your product list.`, product);
-  const saved = await saveAndRefresh(`${product.name} was deleted.`, "warning");
+  const saved = await saveAndRefresh(`${product.name} was deleted.`, "warning", { scope: "product" });
 
   if (saved && elements.productId.value === productId) {
     resetProductForm();
+  }
+
+  if (!saved) {
+    state = previousState;
+    renderAll();
   }
 }
 
@@ -4719,15 +4886,15 @@ async function resetToDemoState() {
   }
 }
 
-async function saveAndRefresh(message, tone) {
+async function saveAndRefresh(message, tone, options = {}) {
   setBusyState(true, "Saving store updates...");
-  const saved = await saveState();
+  const saved = await saveState(options);
   renderAll();
   setBusyState(false);
   if (!saved) {
     setFeedback(
       cloudMode
-        ? "The change could not be synchronized to the shared workspace. Please try again."
+        ? lastCloudSaveErrorMessage || "The change could not be synchronized to the shared workspace. Please try again."
         : "The change could not be saved on this browser right now. Please try again.",
       "danger"
     );
