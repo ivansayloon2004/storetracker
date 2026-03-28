@@ -2159,7 +2159,7 @@ function renderRecentActivity() {
     .join("");
 }
 
-function handleProductSubmit(event) {
+async function handleProductSubmit(event) {
   event.preventDefault();
 
   const productId = elements.productId.value.trim();
