@@ -2,6 +2,7 @@ const LEGACY_STORAGE_KEY = "tindahan-tracker-state-v1";
 const ACCOUNTS_KEY = "tindahan-tracker-accounts-v1";
 const SESSION_KEY = "tindahan-tracker-session-v1";
 const STORE_DATA_KEY = "tindahan-tracker-store-data-v1";
+const ADMIN_KEY = "tindahan-tracker-admin-v1";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -22,7 +23,9 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 });
 
 let accounts = loadAccounts();
+let adminRecord = loadAdminRecord();
 let session = loadSession();
+let currentAdmin = resolveCurrentAdmin();
 let currentAccount = resolveCurrentAccount();
 let state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
 const filters = {
@@ -34,12 +37,15 @@ const filters = {
 let authMode = "login";
 let feedbackTimer;
 let authMessageTimer;
+let adminFeedbackTimer;
 
 const elements = {
   authShell: document.querySelector("#auth-shell"),
   appShell: document.querySelector("#app-shell"),
+  adminShell: document.querySelector("#admin-shell"),
   loginTab: document.querySelector("#login-tab"),
   signupTab: document.querySelector("#signup-tab"),
+  adminTab: document.querySelector("#admin-tab"),
   authTitle: document.querySelector("#auth-title"),
   authSubtitle: document.querySelector("#auth-subtitle"),
   authMessage: document.querySelector("#auth-message"),
@@ -52,6 +58,17 @@ const elements = {
   signupEmail: document.querySelector("#signup-email"),
   signupPassword: document.querySelector("#signup-password"),
   signupConfirmPassword: document.querySelector("#signup-confirm-password"),
+  adminForm: document.querySelector("#admin-form"),
+  adminModeNote: document.querySelector("#admin-mode-note"),
+  adminSetupFields: document.querySelector("#admin-setup-fields"),
+  adminLoginFields: document.querySelector("#admin-login-fields"),
+  adminName: document.querySelector("#admin-name"),
+  adminEmail: document.querySelector("#admin-email"),
+  adminPassword: document.querySelector("#admin-password"),
+  adminConfirmPassword: document.querySelector("#admin-confirm-password"),
+  adminLoginEmail: document.querySelector("#admin-login-email"),
+  adminLoginPassword: document.querySelector("#admin-login-password"),
+  adminSubmit: document.querySelector("#admin-submit"),
   todayLabel: document.querySelector("#today-label"),
   accountBadge: document.querySelector("#account-badge"),
   sessionNote: document.querySelector("#session-note"),
@@ -105,6 +122,27 @@ const elements = {
   importTrigger: document.querySelector("#import-trigger"),
   importFile: document.querySelector("#import-file"),
   resetDemo: document.querySelector("#reset-demo"),
+  adminTodayLabel: document.querySelector("#admin-today-label"),
+  adminCoverageNote: document.querySelector("#admin-coverage-note"),
+  adminNameDisplay: document.querySelector("#admin-name-display"),
+  adminEmailDisplay: document.querySelector("#admin-email-display"),
+  adminFeedbackMessage: document.querySelector("#admin-feedback-message"),
+  adminExportButton: document.querySelector("#admin-export-button"),
+  adminLogoutButton: document.querySelector("#admin-logout-button"),
+  adminTotalUsers: document.querySelector("#admin-total-users"),
+  adminUsersFoot: document.querySelector("#admin-users-foot"),
+  adminTotalProducts: document.querySelector("#admin-total-products"),
+  adminProductsFoot: document.querySelector("#admin-products-foot"),
+  adminTotalValue: document.querySelector("#admin-total-value"),
+  adminValueFoot: document.querySelector("#admin-value-foot"),
+  adminRiskStores: document.querySelector("#admin-risk-stores"),
+  adminRiskFoot: document.querySelector("#admin-risk-foot"),
+  adminSummaryText: document.querySelector("#admin-summary-text"),
+  adminSummaryNote: document.querySelector("#admin-summary-note"),
+  adminUsersBody: document.querySelector("#admin-users-body"),
+  adminAttentionList: document.querySelector("#admin-attention-list"),
+  adminActivityList: document.querySelector("#admin-activity-list"),
+  adminOwnerList: document.querySelector("#admin-owner-list"),
 };
 
 setupEventListeners();
@@ -113,6 +151,7 @@ syncInterface();
 function setupEventListeners() {
   elements.loginTab.addEventListener("click", () => setAuthMode("login"));
   elements.signupTab.addEventListener("click", () => setAuthMode("signup"));
+  elements.adminTab.addEventListener("click", () => setAuthMode("admin"));
 
   elements.loginForm.addEventListener("submit", (event) => {
     void handleLoginSubmit(event);
@@ -120,6 +159,10 @@ function setupEventListeners() {
 
   elements.signupForm.addEventListener("submit", (event) => {
     void handleSignupSubmit(event);
+  });
+
+  elements.adminForm.addEventListener("submit", (event) => {
+    void handleAdminSubmit(event);
   });
 
   elements.searchInput.addEventListener("input", (event) => {
@@ -152,47 +195,69 @@ function setupEventListeners() {
   elements.importFile.addEventListener("change", importStateFromFile);
   elements.resetDemo.addEventListener("click", resetToDemoState);
   elements.logoutButton.addEventListener("click", logoutCurrentAccount);
+  elements.adminExportButton.addEventListener("click", exportAdminReport);
+  elements.adminLogoutButton.addEventListener("click", logoutAdmin);
 }
 
 function syncInterface() {
+  currentAdmin = resolveCurrentAdmin();
   currentAccount = resolveCurrentAccount();
   state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
   renderAuthMode();
   renderVisibility();
 
-  if (currentAccount) {
+  if (currentAdmin) {
+    resetAuthForms();
+    renderAdminDashboard();
+  } else if (currentAccount) {
     resetAuthForms();
     renderAll();
   } else {
     document.title = "Tindahan Tracker";
-    setAuthMessage("Create an account to start using your own store dashboard.");
+    setAuthMessage(defaultAuthMessage());
   }
 }
 
 function setAuthMode(mode) {
-  authMode = mode === "signup" ? "signup" : "login";
+  authMode = ["signup", "admin"].includes(mode) ? mode : "login";
   renderAuthMode();
+
+  if (!currentAccount && !currentAdmin) {
+    setAuthMessage(defaultAuthMessage());
+  }
 }
 
 function renderAuthMode() {
   const isSignup = authMode === "signup";
+  const isAdmin = authMode === "admin";
 
-  elements.loginForm.hidden = isSignup;
+  elements.loginForm.hidden = isSignup || isAdmin;
   elements.signupForm.hidden = !isSignup;
-  elements.loginTab.classList.toggle("is-active", !isSignup);
+  elements.adminForm.hidden = !isAdmin;
+  elements.loginTab.classList.toggle("is-active", authMode === "login");
   elements.signupTab.classList.toggle("is-active", isSignup);
-  elements.loginTab.setAttribute("aria-selected", String(!isSignup));
+  elements.adminTab.classList.toggle("is-active", isAdmin);
+  elements.loginTab.setAttribute("aria-selected", String(authMode === "login"));
   elements.signupTab.setAttribute("aria-selected", String(isSignup));
-  elements.authTitle.textContent = isSignup ? "Create your store account" : "Log in to your store";
-  elements.authSubtitle.textContent = isSignup
-    ? "Create a browser-based account so your store inventory stays separate from other store owners."
-    : "Use your email and password to open your store dashboard on this browser.";
+  elements.adminTab.setAttribute("aria-selected", String(isAdmin));
+
+  if (isSignup) {
+    elements.authTitle.textContent = "Create your store account";
+    elements.authSubtitle.textContent =
+      "Create a browser-based account so your store inventory stays separate from other store owners.";
+  } else if (isAdmin) {
+    renderAdminAuthMode();
+  } else {
+    elements.authTitle.textContent = "Log in to your store";
+    elements.authSubtitle.textContent = "Use your email and password to open your store dashboard on this browser.";
+  }
 }
 
 function renderVisibility() {
-  const loggedIn = Boolean(currentAccount);
-  elements.authShell.hidden = loggedIn;
-  elements.appShell.hidden = !loggedIn;
+  const hasActiveSession = Boolean(currentAccount || currentAdmin);
+  elements.authShell.hidden = hasActiveSession;
+  elements.appShell.hidden = !currentAccount;
+  elements.adminShell.hidden = !currentAdmin;
 }
 
 function loadAccounts() {
@@ -215,6 +280,30 @@ function saveAccounts() {
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
 }
 
+function loadAdminRecord() {
+  const saved = localStorage.getItem(ADMIN_KEY);
+
+  if (!saved) {
+    return null;
+  }
+
+  try {
+    return normalizeAdminRecord(JSON.parse(saved));
+  } catch (error) {
+    console.warn("Unable to read admin account.", error);
+    return null;
+  }
+}
+
+function saveAdminRecord() {
+  if (!adminRecord) {
+    localStorage.removeItem(ADMIN_KEY);
+    return;
+  }
+
+  localStorage.setItem(ADMIN_KEY, JSON.stringify(adminRecord));
+}
+
 function loadSession() {
   const saved = localStorage.getItem(SESSION_KEY);
 
@@ -224,15 +313,26 @@ function loadSession() {
 
   try {
     const parsed = JSON.parse(saved);
-    return parsed?.accountId ? { accountId: `${parsed.accountId}` } : null;
+    if (parsed?.role && parsed?.id) {
+      return {
+        role: parsed.role === "admin" ? "admin" : "store",
+        id: `${parsed.id}`,
+      };
+    }
+
+    if (parsed?.accountId) {
+      return { role: "store", id: `${parsed.accountId}` };
+    }
+
+    return null;
   } catch (error) {
     console.warn("Unable to read saved session.", error);
     return null;
   }
 }
 
-function saveSession(accountId) {
-  session = { accountId };
+function saveSession(role, id) {
+  session = { role, id };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
@@ -242,11 +342,19 @@ function clearSession() {
 }
 
 function resolveCurrentAccount() {
-  if (!session?.accountId) {
+  if (!session?.id || session.role !== "store") {
     return null;
   }
 
-  return accounts.find((account) => account.id === session.accountId) || null;
+  return accounts.find((account) => account.id === session.id) || null;
+}
+
+function resolveCurrentAdmin() {
+  if (!session?.id || session.role !== "admin" || !adminRecord) {
+    return null;
+  }
+
+  return adminRecord.id === session.id ? adminRecord : null;
 }
 
 function normalizeAccount(account) {
@@ -263,6 +371,22 @@ function normalizeAccount(account) {
     passwordHash: `${account.passwordHash}`,
     createdAt: normalizeDate(account.createdAt),
     lastLoginAt: normalizeDate(account.lastLoginAt || account.createdAt),
+  };
+}
+
+function normalizeAdminRecord(admin) {
+  if (!admin || !admin.id || !admin.email || !admin.passwordHash || !admin.passwordSalt) {
+    return null;
+  }
+
+  return {
+    id: `${admin.id}`,
+    name: `${admin.name || "Admin"}`.trim() || "Admin",
+    email: normalizeEmail(admin.email),
+    passwordSalt: `${admin.passwordSalt}`,
+    passwordHash: `${admin.passwordHash}`,
+    createdAt: normalizeDate(admin.createdAt),
+    lastLoginAt: normalizeDate(admin.lastLoginAt || admin.createdAt),
   };
 }
 
@@ -609,7 +733,8 @@ async function handleSignupSubmit(event) {
 
   accounts.unshift(account);
   saveAccounts();
-  saveSession(account.id);
+  saveSession("store", account.id);
+  currentAdmin = null;
   currentAccount = account;
   state = initializeStoreStateForAccount(account);
   resetAuthForms();
@@ -640,7 +765,8 @@ async function handleLoginSubmit(event) {
   account.lastLoginAt = new Date().toISOString();
   accounts = accounts.map((entry) => (entry.id === account.id ? account : entry));
   saveAccounts();
-  saveSession(account.id);
+  saveSession("store", account.id);
+  currentAdmin = null;
   currentAccount = account;
   state = initializeStoreStateForAccount(account);
   renderVisibility();
@@ -649,9 +775,117 @@ async function handleLoginSubmit(event) {
   setFeedback(`Welcome back, ${account.ownerName}.`, "success");
 }
 
+function renderAdminAuthMode() {
+  const hasAdmin = Boolean(adminRecord);
+
+  elements.authTitle.textContent = hasAdmin ? "Log in to admin panel" : "Set up your admin panel";
+  elements.authSubtitle.textContent = hasAdmin
+    ? "Use the admin credentials for this browser to monitor all saved store-owner accounts."
+    : "Create the first admin account for this browser so you can monitor all saved store-owner accounts.";
+  elements.adminSetupFields.hidden = hasAdmin;
+  elements.adminLoginFields.hidden = !hasAdmin;
+  elements.adminModeNote.querySelector("span").textContent = hasAdmin ? "Admin login" : "Admin setup";
+  elements.adminModeNote.querySelector("p").textContent = hasAdmin
+    ? "Only the browser admin can open the monitoring dashboard."
+    : "This one-time admin account will monitor all store owners saved in this browser.";
+  elements.adminSubmit.textContent = hasAdmin ? "Open Admin Panel" : "Set Up Admin";
+}
+
+function defaultAuthMessage() {
+  if (authMode === "signup") {
+    return "Create an account to start using your own store dashboard.";
+  }
+
+  if (authMode === "admin") {
+    return adminRecord
+      ? "Log in as the browser admin to monitor all saved store-owner accounts."
+      : "Set up the first browser admin account to monitor all saved users.";
+  }
+
+  return "Use your email and password to open your store dashboard on this browser.";
+}
+
+async function handleAdminSubmit(event) {
+  event.preventDefault();
+
+  if (!adminRecord) {
+    const name = elements.adminName.value.trim();
+    const email = normalizeEmail(elements.adminEmail.value);
+    const password = elements.adminPassword.value;
+    const confirmPassword = elements.adminConfirmPassword.value;
+
+    if (!name || !email) {
+      setAuthMessage("Please complete the admin setup form first.", "danger");
+      return;
+    }
+
+    if (password.length < 6) {
+      setAuthMessage("Admin password must be at least 6 characters.", "danger");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setAuthMessage("The admin passwords do not match.", "danger");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const passwordSalt = uid("admin-salt");
+    const passwordHash = await hashPassword(password, passwordSalt);
+
+    adminRecord = {
+      id: uid("admin"),
+      name,
+      email,
+      passwordSalt,
+      passwordHash,
+      createdAt: now,
+      lastLoginAt: now,
+    };
+
+    saveAdminRecord();
+    saveSession("admin", adminRecord.id);
+    currentAccount = null;
+    currentAdmin = adminRecord;
+    state = buildEmptyState();
+    resetAuthForms();
+    renderVisibility();
+    renderAdminDashboard();
+    setAdminFeedback(`Admin panel is ready, ${name}.`, "success");
+    return;
+  }
+
+  const email = normalizeEmail(elements.adminLoginEmail.value);
+  const password = elements.adminLoginPassword.value;
+
+  if (email !== adminRecord.email) {
+    setAuthMessage("That admin email does not match this browser's admin account.", "danger");
+    return;
+  }
+
+  const passwordHash = await hashPassword(password, adminRecord.passwordSalt);
+
+  if (passwordHash !== adminRecord.passwordHash) {
+    setAuthMessage("Incorrect admin password. Please try again.", "danger");
+    return;
+  }
+
+  adminRecord.lastLoginAt = new Date().toISOString();
+  saveAdminRecord();
+  saveSession("admin", adminRecord.id);
+  currentAccount = null;
+  currentAdmin = adminRecord;
+  state = buildEmptyState();
+  renderVisibility();
+  renderAdminDashboard();
+  elements.adminLoginPassword.value = "";
+  setAdminFeedback(`Welcome back, ${adminRecord.name}.`, "success");
+}
+
 function logoutCurrentAccount() {
   clearSession();
   currentAccount = null;
+  currentAdmin = null;
   state = buildEmptyState();
   resetAppForms();
   renderVisibility();
@@ -659,9 +893,20 @@ function logoutCurrentAccount() {
   setAuthMessage("You logged out. Another store owner can sign in now.", "success");
 }
 
+function logoutAdmin() {
+  clearSession();
+  currentAdmin = null;
+  currentAccount = null;
+  state = buildEmptyState();
+  renderVisibility();
+  setAuthMode("admin");
+  setAuthMessage("Admin logged out. Sign back in to monitor store owners again.", "success");
+}
+
 function resetAuthForms() {
   elements.loginForm.reset();
   elements.signupForm.reset();
+  elements.adminForm.reset();
 }
 
 function resetAppForms() {
@@ -692,6 +937,20 @@ function renderAll() {
   updateRestockPreview();
 }
 
+function renderAdminDashboard() {
+  if (!currentAdmin) {
+    return;
+  }
+
+  document.title = "Admin Panel | Tindahan Tracker";
+  renderAdminProfile();
+  renderAdminStats();
+  renderAdminUsersTable();
+  renderAdminAttentionList();
+  renderAdminActivityList();
+  renderAdminOwnerList();
+}
+
 function renderAccountProfile() {
   elements.storeHeading.textContent = currentAccount.storeName;
   elements.storeSubtitle.textContent = `${currentAccount.ownerName} can track products, sales, and restocks from one dashboard.`;
@@ -699,6 +958,16 @@ function renderAccountProfile() {
   elements.sessionNote.textContent = "Each store account is saved separately on this browser.";
   elements.storeNameDisplay.textContent = currentAccount.storeName;
   elements.storeOwnerDisplay.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
+}
+
+function renderAdminProfile() {
+  const summaries = getAdminStoreSummaries();
+  elements.adminTodayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
+  elements.adminCoverageNote.textContent = `Monitoring ${summaries.length} browser-local store account${
+    summaries.length === 1 ? "" : "s"
+  }.`;
+  elements.adminNameDisplay.textContent = currentAdmin.name;
+  elements.adminEmailDisplay.textContent = currentAdmin.email;
 }
 
 function saveState() {
@@ -744,6 +1013,164 @@ function renderStats() {
   } else {
     elements.stockValueFoot.textContent = "Add products to compute stock value";
   }
+}
+
+function renderAdminStats() {
+  const summaries = getAdminStoreSummaries();
+  const totalUsers = summaries.length;
+  const totalProducts = sum(summaries.map((summary) => summary.productCount));
+  const totalValue = sum(summaries.map((summary) => summary.stockValue));
+  const totalTodaySales = sum(summaries.map((summary) => summary.todaySales));
+  const riskStores = summaries.filter((summary) => summary.lowStockCount > 0).length;
+
+  elements.adminTotalUsers.textContent = numberFormatter.format(totalUsers);
+  elements.adminUsersFoot.textContent = `${totalUsers} store owner${totalUsers === 1 ? "" : "s"} registered locally`;
+  elements.adminTotalProducts.textContent = numberFormatter.format(totalProducts);
+  elements.adminProductsFoot.textContent = `${totalProducts} products across all local stores`;
+  elements.adminTotalValue.textContent = currencyFormatter.format(totalValue);
+  elements.adminValueFoot.textContent = `Today's combined sales: ${currencyFormatter.format(totalTodaySales)}`;
+  elements.adminRiskStores.textContent = numberFormatter.format(riskStores);
+  elements.adminRiskFoot.textContent = riskStores
+    ? `${riskStores} store${riskStores === 1 ? "" : "s"} need restock attention`
+    : "No stores flagged right now";
+}
+
+function renderAdminUsersTable() {
+  const summaries = getAdminStoreSummaries();
+
+  if (!summaries.length) {
+    elements.adminUsersBody.innerHTML = `
+      <tr>
+        <td colspan="8">
+          <div class="empty-state">
+            No store-owner accounts have been created on this browser yet.
+          </div>
+        </td>
+      </tr>
+    `;
+  } else {
+    elements.adminUsersBody.innerHTML = summaries
+      .map((summary) => {
+        const alertStatus = getAdminRiskStatus(summary);
+        return `
+          <tr>
+            <td>
+              <div class="product-cell">
+                <span class="product-name">${escapeHtml(summary.storeName)}</span>
+                <span class="product-meta">${escapeHtml(summary.email)}</span>
+              </div>
+            </td>
+            <td>
+              <div class="product-cell">
+                <span>${escapeHtml(summary.ownerName)}</span>
+                <span class="product-meta">Created ${dateTimeFormatter.format(new Date(summary.createdAt))}</span>
+              </div>
+            </td>
+            <td>${numberFormatter.format(summary.productCount)}</td>
+            <td>${currencyFormatter.format(summary.stockValue)}</td>
+            <td>${currencyFormatter.format(summary.todaySales)}</td>
+            <td><span class="status-pill ${alertStatus.className}">${escapeHtml(alertStatus.label)}</span></td>
+            <td>${dateTimeFormatter.format(new Date(summary.lastLoginAt))}</td>
+            <td>${dateTimeFormatter.format(new Date(summary.lastActivityAt))}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  elements.adminSummaryText.textContent = `Showing ${summaries.length} browser-local store account${
+    summaries.length === 1 ? "" : "s"
+  }`;
+  elements.adminSummaryNote.textContent = "This dashboard only sees users saved on this browser and device.";
+}
+
+function renderAdminAttentionList() {
+  const flaggedStores = getAdminStoreSummaries()
+    .filter((summary) => summary.lowStockCount > 0)
+    .sort((left, right) => right.lowStockCount - left.lowStockCount || right.outOfStockCount - left.outOfStockCount);
+
+  if (!flaggedStores.length) {
+    elements.adminAttentionList.innerHTML = `
+      <div class="empty-state">
+        No local stores are currently below their reorder levels.
+      </div>
+    `;
+    return;
+  }
+
+  elements.adminAttentionList.innerHTML = flaggedStores
+    .slice(0, 6)
+    .map((summary) => `
+      <article class="list-card">
+        <strong>${escapeHtml(summary.storeName)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(summary.ownerName)}</span>
+          <span>${summary.lowStockCount} low-stock item${summary.lowStockCount === 1 ? "" : "s"}</span>
+        </div>
+        <div class="list-meta">
+          <span>${summary.outOfStockCount} out of stock</span>
+          <span>Value: ${currencyFormatter.format(summary.stockValue)}</span>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function renderAdminActivityList() {
+  const activities = getAdminRecentActivities();
+
+  if (!activities.length) {
+    elements.adminActivityList.innerHTML = `
+      <div class="empty-state">
+        Activity from all store accounts will appear here once users start using the tracker.
+      </div>
+    `;
+    return;
+  }
+
+  elements.adminActivityList.innerHTML = activities
+    .slice(0, 8)
+    .map((activity) => `
+      <article class="activity-card">
+        <strong>${escapeHtml(activity.message)}</strong>
+        <div class="activity-meta">
+          <span>${escapeHtml(activity.storeName)}</span>
+          <span>${dateTimeFormatter.format(new Date(activity.occurredAt))}</span>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function renderAdminOwnerList() {
+  const summaries = getAdminStoreSummaries();
+
+  if (!summaries.length) {
+    elements.adminOwnerList.innerHTML = `
+      <div class="empty-state">
+        Create store-owner accounts first to build the admin watch list.
+      </div>
+    `;
+    return;
+  }
+
+  elements.adminOwnerList.innerHTML = summaries
+    .slice()
+    .sort((left, right) => new Date(right.lastLoginAt) - new Date(left.lastLoginAt))
+    .slice(0, 6)
+    .map((summary) => `
+      <article class="list-card">
+        <strong>${escapeHtml(summary.ownerName)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(summary.storeName)}</span>
+          <span>${escapeHtml(summary.email)}</span>
+        </div>
+        <div class="list-meta">
+          <span>Last login: ${dateTimeFormatter.format(new Date(summary.lastLoginAt))}</span>
+        </div>
+      </article>
+    `)
+    .join("");
 }
 
 function populateCategoryFilter() {
@@ -1279,6 +1706,36 @@ function exportState() {
   setFeedback("Backup downloaded successfully.", "success");
 }
 
+function exportAdminReport() {
+  if (!currentAdmin) {
+    return;
+  }
+
+  const payload = JSON.stringify(
+    {
+      admin: {
+        name: currentAdmin.name,
+        email: currentAdmin.email,
+      },
+      summaries: getAdminStoreSummaries(),
+      recentActivity: getAdminRecentActivities(),
+      exportedAt: new Date().toISOString(),
+    },
+    null,
+    2
+  );
+  const blob = new Blob([payload], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `admin-user-report-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setAdminFeedback("User report exported successfully.", "success");
+}
+
 function importStateFromFile(event) {
   const file = event.target.files?.[0];
   if (!file) {
@@ -1391,6 +1848,83 @@ function getCategorySummaries() {
     .sort((left, right) => right.value - left.value);
 }
 
+function getAdminStoreSummaries() {
+  const storeMap = loadStoreMap();
+
+  return accounts
+    .map((account) => {
+      const storeState = normalizeState(storeMap[account.id] || buildEmptyState());
+      const products = storeState.products;
+      const lowStockProducts = products.filter((product) => {
+        const status = getProductStatus(product).key;
+        return status === "reorder" || status === "out";
+      });
+      const outOfStockCount = lowStockProducts.filter((product) => getProductStatus(product).key === "out").length;
+      const todaySales = sum(
+        storeState.transactions
+          .filter((transaction) => transaction.type === "sale" && isToday(transaction.occurredAt))
+          .map((transaction) => transaction.total)
+      );
+      const stockValue = sum(products.map((product) => product.stock * product.price));
+      const latestActivity = [...storeState.activity]
+        .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt))[0];
+
+      return {
+        id: account.id,
+        storeName: account.storeName,
+        ownerName: account.ownerName,
+        email: account.email,
+        createdAt: account.createdAt,
+        lastLoginAt: account.lastLoginAt,
+        lastActivityAt: latestActivity?.occurredAt || account.createdAt,
+        productCount: products.length,
+        totalUnits: sum(products.map((product) => product.stock)),
+        stockValue,
+        todaySales,
+        lowStockCount: lowStockProducts.length,
+        outOfStockCount,
+      };
+    })
+    .sort((left, right) => new Date(right.lastActivityAt) - new Date(left.lastActivityAt));
+}
+
+function getAdminRecentActivities() {
+  const storeMap = loadStoreMap();
+
+  return accounts
+    .flatMap((account) => {
+      const storeState = normalizeState(storeMap[account.id] || buildEmptyState());
+      return storeState.activity.map((activity) => ({
+        ...activity,
+        storeName: account.storeName,
+        ownerName: account.ownerName,
+        email: account.email,
+      }));
+    })
+    .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+}
+
+function getAdminRiskStatus(summary) {
+  if (summary.outOfStockCount > 0) {
+    return {
+      className: "admin-danger",
+      label: `${summary.outOfStockCount} out`,
+    };
+  }
+
+  if (summary.lowStockCount > 0) {
+    return {
+      className: "admin-watch",
+      label: `${summary.lowStockCount} low`,
+    };
+  }
+
+  return {
+    className: "admin-good",
+    label: "Healthy",
+  };
+}
+
 function isToday(isoDate) {
   const candidate = new Date(isoDate);
   const today = new Date();
@@ -1425,9 +1959,7 @@ function setAuthMessage(message, tone = "default") {
 
   elements.authMessage.dataset.tone = tone;
   authMessageTimer = window.setTimeout(() => {
-    elements.authMessage.textContent = authMode === "signup"
-      ? "Create an account to start using your own store dashboard."
-      : "Use your email and password to open your store dashboard on this browser.";
+    elements.authMessage.textContent = defaultAuthMessage();
     delete elements.authMessage.dataset.tone;
   }, 4200);
 }
@@ -1445,6 +1977,22 @@ function setFeedback(message, tone = "default") {
   feedbackTimer = window.setTimeout(() => {
     elements.feedbackMessage.textContent = "Ready to track your products.";
     delete elements.feedbackMessage.dataset.tone;
+  }, 4200);
+}
+
+function setAdminFeedback(message, tone = "default") {
+  window.clearTimeout(adminFeedbackTimer);
+  elements.adminFeedbackMessage.textContent = message;
+
+  if (tone === "default") {
+    delete elements.adminFeedbackMessage.dataset.tone;
+  } else {
+    elements.adminFeedbackMessage.dataset.tone = tone;
+  }
+
+  adminFeedbackTimer = window.setTimeout(() => {
+    elements.adminFeedbackMessage.textContent = "Monitoring all local store-owner accounts.";
+    delete elements.adminFeedbackMessage.dataset.tone;
   }, 4200);
 }
 

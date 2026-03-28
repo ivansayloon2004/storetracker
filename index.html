@@ -6,7 +6,7 @@
   <title>Tindahan Tracker</title>
   <meta
     name="description"
-    content="Track sari-sari store products, stock levels, sales, restocking, and store-owner logins in one dashboard."
+    content="Track sari-sari store products, store-owner logins, and admin user monitoring in one dashboard."
   >
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -17,47 +17,50 @@
         <p class="eyebrow">Built for sari-sari stores</p>
         <h1>Tindahan Tracker</h1>
         <p class="hero-lead">
-          Let every store owner sign in to their own inventory board, check stock quickly, and keep daily product movement organized.
+          Let store owners manage inventory while you keep an eye on users, activity, and risky stores from one admin panel.
         </p>
 
         <div class="auth-feature-grid">
           <article class="auth-feature-card">
-            <strong>Separate store space</strong>
-            <p>Each account gets its own saved products, sales, and restock history on this browser.</p>
+            <strong>Separate store spaces</strong>
+            <p>Each store owner keeps a separate inventory, sales history, and restock log on this browser.</p>
           </article>
 
           <article class="auth-feature-card">
-            <strong>Fast daily tracking</strong>
-            <p>Log sales, refill stock, search items, and see low-stock warnings in one place.</p>
+            <strong>Admin overview</strong>
+            <p>Monitor accounts, check store health, and review recent activity from a dedicated admin dashboard.</p>
           </article>
 
           <article class="auth-feature-card">
-            <strong>Backup ready</strong>
-            <p>Export a JSON backup and import it again whenever you want to move or restore store data.</p>
+            <strong>Backup friendly</strong>
+            <p>Store owners can export their own backup, and the admin can review all browser-local users in one place.</p>
           </article>
         </div>
 
         <div class="auth-note">
-          <span>Browser-only login</span>
+          <span>Current scope</span>
           <p>
-            This version keeps each store account on the current browser and device. For true shared cloud accounts across multiple devices, we can connect a backend next.
+            This version can monitor all users saved in this browser and device. If you want real global admin monitoring across all phones and computers, we need to connect a backend next.
           </p>
         </div>
       </section>
 
       <section class="panel auth-card">
-        <div class="auth-tabs" role="tablist" aria-label="Authentication options">
+        <div class="auth-tabs auth-tabs-wide" role="tablist" aria-label="Authentication options">
           <button class="auth-tab is-active" id="login-tab" type="button" role="tab" aria-selected="true">
             Log In
           </button>
           <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false">
             Create Account
           </button>
+          <button class="auth-tab" id="admin-tab" type="button" role="tab" aria-selected="false">
+            Admin Panel
+          </button>
         </div>
 
         <div class="auth-panel">
           <div class="auth-copy">
-            <p class="eyebrow">Store owner access</p>
+            <p class="eyebrow">Access</p>
             <h2 id="auth-title">Log in to your store</h2>
             <p id="auth-subtitle">
               Use your email and password to open your store dashboard on this browser.
@@ -107,6 +110,51 @@
             </div>
 
             <button class="button primary" type="submit">Create Account</button>
+          </form>
+
+          <form class="stack-form" id="admin-form" hidden>
+            <div class="auth-note compact" id="admin-mode-note">
+              <span>Admin setup</span>
+              <p>Create the browser admin account that can monitor all locally saved users.</p>
+            </div>
+
+            <div id="admin-setup-fields">
+              <label class="field">
+                <span>Admin name</span>
+                <input id="admin-name" type="text" maxlength="80" placeholder="Ex. Ivan Admin">
+              </label>
+
+              <label class="field">
+                <span>Admin email</span>
+                <input id="admin-email" type="email" placeholder="admin@storetracker.com" autocomplete="email">
+              </label>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Password</span>
+                  <input id="admin-password" type="password" minlength="6" placeholder="At least 6 characters" autocomplete="new-password">
+                </label>
+
+                <label class="field">
+                  <span>Confirm password</span>
+                  <input id="admin-confirm-password" type="password" minlength="6" placeholder="Repeat password" autocomplete="new-password">
+                </label>
+              </div>
+            </div>
+
+            <div id="admin-login-fields" hidden>
+              <label class="field">
+                <span>Admin email</span>
+                <input id="admin-login-email" type="email" placeholder="admin@storetracker.com" autocomplete="email">
+              </label>
+
+              <label class="field">
+                <span>Password</span>
+                <input id="admin-login-password" type="password" minlength="6" placeholder="Enter admin password" autocomplete="current-password">
+              </label>
+            </div>
+
+            <button class="button primary" id="admin-submit" type="submit">Set Up Admin</button>
           </form>
 
           <p class="auth-message" id="auth-message">Create an account to start using your own store dashboard.</p>
@@ -406,6 +454,134 @@
         </div>
 
         <div class="activity-list" id="recent-activity"></div>
+      </section>
+    </section>
+  </div>
+
+  <div class="page-shell" id="admin-shell" hidden>
+    <header class="hero panel admin-hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Admin panel</p>
+        <h1>Store Owner Monitor</h1>
+        <p class="hero-lead">
+          Review all browser-local store accounts, spot risky stores early, and monitor cross-store activity from one place.
+        </p>
+        <div class="hero-notes">
+          <span id="admin-today-label">Loading admin snapshot...</span>
+          <span id="admin-coverage-note">This admin view only monitors users saved on this browser.</span>
+        </div>
+      </div>
+
+      <div class="hero-controls">
+        <div class="hero-actions">
+          <button class="button ghost" id="admin-export-button" type="button">Export User Report</button>
+          <button class="button ghost" id="admin-logout-button" type="button">Log Out</button>
+        </div>
+
+        <div class="account-card">
+          <p class="eyebrow">Admin session</p>
+          <h2 id="admin-name-display">Admin</h2>
+          <p id="admin-email-display">admin@storetracker.com</p>
+        </div>
+
+        <p class="feedback-message" id="admin-feedback-message">Monitoring all local store-owner accounts.</p>
+      </div>
+    </header>
+
+    <section class="stats-grid" aria-label="Admin summary">
+      <article class="panel stat-card">
+        <p class="stat-label">Store Owners</p>
+        <h2 class="stat-value" id="admin-total-users">0</h2>
+        <p class="stat-foot" id="admin-users-foot">0 total registered accounts</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Tracked Products</p>
+        <h2 class="stat-value" id="admin-total-products">0</h2>
+        <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Combined Stock Value</p>
+        <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
+        <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
+      </article>
+
+      <article class="panel stat-card">
+        <p class="stat-label">Stores Needing Attention</p>
+        <h2 class="stat-value" id="admin-risk-stores">0</h2>
+        <p class="stat-foot" id="admin-risk-foot">No stores flagged right now</p>
+      </article>
+    </section>
+
+    <section class="panel inventory-panel" aria-labelledby="admin-users-title">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Users</p>
+          <h2 id="admin-users-title">Store owner accounts</h2>
+        </div>
+        <p class="panel-copy">Monitor each account’s products, stock value, low-stock count, and latest activity.</p>
+      </div>
+
+      <div class="inventory-summary">
+        <p id="admin-summary-text">Showing 0 store accounts</p>
+        <p id="admin-summary-note">Local browser coverage only</p>
+      </div>
+
+      <div class="table-wrap">
+        <table class="inventory-table">
+          <thead>
+            <tr>
+              <th scope="col">Store</th>
+              <th scope="col">Owner</th>
+              <th scope="col">Products</th>
+              <th scope="col">Stock Value</th>
+              <th scope="col">Sales Today</th>
+              <th scope="col">Alerts</th>
+              <th scope="col">Last Login</th>
+              <th scope="col">Last Activity</th>
+            </tr>
+          </thead>
+          <tbody id="admin-users-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="insights-grid">
+      <section class="panel insight-panel" aria-labelledby="admin-attention-title">
+        <div class="panel-head compact">
+          <div>
+            <p class="eyebrow">Risk watch</p>
+            <h2 id="admin-attention-title">Stores needing attention</h2>
+          </div>
+          <p class="panel-copy">Accounts with low stock or empty shelves right now.</p>
+        </div>
+
+        <div class="list-stack" id="admin-attention-list"></div>
+      </section>
+
+      <section class="panel insight-panel" aria-labelledby="admin-activity-title">
+        <div class="panel-head compact">
+          <div>
+            <p class="eyebrow">Cross-store activity</p>
+            <h2 id="admin-activity-title">Recent user activity</h2>
+          </div>
+          <p class="panel-copy">Latest activity pulled from all store accounts on this browser.</p>
+        </div>
+
+        <div class="activity-list" id="admin-activity-list"></div>
+      </section>
+
+      <section class="panel insight-panel" aria-labelledby="admin-owner-title">
+        <div class="panel-head compact">
+          <div>
+            <p class="eyebrow">Account watch</p>
+            <h2 id="admin-owner-title">Newest and latest logins</h2>
+          </div>
+          <p class="panel-copy">See which store owners were added most recently and who signed in last.</p>
+        </div>
+
+        <div class="list-stack" id="admin-owner-list"></div>
       </section>
     </section>
   </div>

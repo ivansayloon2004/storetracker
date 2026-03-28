@@ -188,6 +188,12 @@ button {
   border: 1px solid rgba(29, 42, 34, 0.08);
 }
 
+.auth-note.compact {
+  margin-top: 0;
+  padding: 0.9rem 0.95rem;
+  background: rgba(255, 247, 233, 0.8);
+}
+
 .auth-note span {
   display: inline-block;
   margin-bottom: 0.4rem;
@@ -204,6 +210,10 @@ button {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.65rem;
+}
+
+.auth-tabs-wide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .auth-tab {
@@ -275,6 +285,12 @@ button {
   background:
     linear-gradient(135deg, rgba(255, 251, 244, 0.92), rgba(249, 237, 213, 0.9)),
     linear-gradient(135deg, rgba(217, 109, 40, 0.08), rgba(44, 140, 112, 0.08));
+}
+
+.admin-hero {
+  background:
+    linear-gradient(135deg, rgba(248, 253, 248, 0.94), rgba(238, 248, 241, 0.92)),
+    linear-gradient(135deg, rgba(44, 140, 112, 0.08), rgba(243, 180, 66, 0.08));
 }
 
 .hero::after {
@@ -502,6 +518,10 @@ button {
   background: rgba(255, 255, 255, 0.5);
 }
 
+#admin-shell .inventory-table {
+  min-width: 980px;
+}
+
 .inventory-table th,
 .inventory-table td {
   padding: 1rem 0.9rem;
@@ -677,6 +697,21 @@ button {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--mint), var(--gold));
+}
+
+.status-pill.admin-good {
+  background: rgba(44, 140, 112, 0.14);
+  color: #216851;
+}
+
+.status-pill.admin-watch {
+  background: rgba(243, 180, 66, 0.18);
+  color: #8b6014;
+}
+
+.status-pill.admin-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .empty-state {
