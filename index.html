@@ -8,7 +8,7 @@
     name="description"
     content="Track sari-sari store products, store-owner logins, and administrative monitoring in one formal dashboard."
   >
-  <link rel="stylesheet" href="styles.css?v=20260328b">
+  <link rel="stylesheet" href="styles.css?v=20260328c">
 </head>
 <body>
   <section class="auth-shell" id="auth-shell">
@@ -40,7 +40,7 @@
         <div class="auth-note">
           <span>Deployment Scope</span>
           <p>
-            Shared phone-and-desktop login is available after you connect a Supabase project in <code>supabase-config.js</code> and run the included SQL setup file.
+            Shared phone-and-desktop login is enabled through Supabase for this deployment.
           </p>
         </div>
       </section>
@@ -54,13 +54,30 @@
             role="tab"
             aria-selected="true"
             data-auth-mode="login"
+            onclick="setAuthMode('login')"
           >
             Log In
           </button>
-          <button class="auth-tab" id="signup-tab" type="button" role="tab" aria-selected="false" data-auth-mode="signup">
+          <button
+            class="auth-tab"
+            id="signup-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            data-auth-mode="signup"
+            onclick="setAuthMode('signup')"
+          >
             Register Store
           </button>
-          <button class="auth-tab" id="admin-tab" type="button" role="tab" aria-selected="false" data-auth-mode="admin">
+          <button
+            class="auth-tab"
+            id="admin-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            data-auth-mode="admin"
+            onclick="setAuthMode('admin')"
+          >
             Administrator
           </button>
         </div>
@@ -70,7 +87,7 @@
             <p class="eyebrow">Access Control</p>
             <h2 id="auth-title">Store account sign in</h2>
             <p id="auth-subtitle">
-              Use your registered email address and password to open the store workspace on this browser.
+              Use your registered email address and password to access the shared store workspace.
             </p>
           </div>
 
@@ -164,7 +181,7 @@
             <button class="button primary" id="admin-submit" type="submit">Set Up Administrator</button>
           </form>
 
-          <p class="auth-message" id="auth-message">Register a store account to begin using the inventory workspace.</p>
+          <p class="auth-message" id="auth-message">Register a store account to begin using the shared inventory workspace.</p>
         </div>
       </section>
     </div>
@@ -650,7 +667,13 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-config.js?v=20260328b"></script>
-  <script src="script.js?v=20260328b"></script>
+  <script>
+    window.TINDAHAN_SUPABASE_CONFIG = {
+      url: "https://djhfudbigivdkyssyyhk.supabase.co",
+      anonKey:
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqaGZ1ZGJpZ2l2ZGt5c3N5eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDAwMjYsImV4cCI6MjA5MDI3NjAyNn0.IVkYuKz903sm7UiE2x3VtJhiDE20pO1t_-AJfHIXteI",
+    };
+  </script>
+  <script src="script.js?v=20260328c"></script>
 </body>
 </html>
