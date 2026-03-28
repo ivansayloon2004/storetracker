@@ -22,13 +22,24 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
   year: "numeric",
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
+const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
+const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
+const supabaseClient = cloudMode
+  ? window.supabase.createClient(cloudConfig.url, cloudConfig.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
+  : null;
 
-let accounts = loadAccounts();
-let adminRecord = loadAdminRecord();
-let session = loadSession();
-let currentAdmin = resolveCurrentAdmin();
-let currentAccount = resolveCurrentAccount();
-let state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
+let accounts = cloudMode ? [] : loadAccounts();
+let adminRecord = cloudMode ? null : loadAdminRecord();
+let session = cloudMode ? null : loadSession();
+let currentAdmin = cloudMode ? null : resolveCurrentAdmin();
+let currentAccount = cloudMode ? null : resolveCurrentAccount();
+let state = !cloudMode && currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
+let remoteStoreMap = {};
 const filters = {
   search: "",
   category: "all",
@@ -162,7 +173,12 @@ const elements = {
 
 setupSegmentedTabs();
 setupEventListeners();
-syncInterface();
+if (cloudMode) {
+  supabaseClient.auth.onAuthStateChange(() => {
+    void syncInterface();
+  });
+}
+void syncInterface();
 
 function setupSegmentedTabs() {
   const buttons = document.querySelectorAll("[data-tab-group][data-tab-target]");
@@ -260,27 +276,6 @@ function setupEventListeners() {
   elements.adminLogoutButton.addEventListener("click", logoutAdmin);
 }
 
-function syncInterface() {
-  currentAdmin = resolveCurrentAdmin();
-  currentAccount = resolveCurrentAccount();
-  state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
-  renderAuthMode();
-  renderVisibility();
-
-  if (currentAdmin) {
-    stopCameraScanner({ silent: true });
-    resetAuthForms();
-    renderAdminDashboard();
-  } else if (currentAccount) {
-    resetAuthForms();
-    renderAll();
-  } else {
-    stopCameraScanner({ silent: true });
-    document.title = "Tindahan Tracker | Inventory Management Suite";
-    setAuthMessage(defaultAuthMessage());
-  }
-}
-
 function setAuthMode(mode) {
   authMode = ["signup", "admin"].includes(mode) ? mode : "login";
   renderAuthMode();
@@ -307,13 +302,17 @@ function renderAuthMode() {
   if (isSignup) {
     elements.authTitle.textContent = "Create your store account";
     elements.authSubtitle.textContent =
-      "Register a browser-based store account so inventory records remain separate for each business on this device.";
+      cloudMode
+        ? "Register a shared store account so the same inventory can be used on phone and desktop."
+        : "Register a browser-based store account so inventory records remain separate for each business on this device.";
   } else if (isAdmin) {
     renderAdminAuthMode();
   } else {
     elements.authTitle.textContent = "Log in to your store";
     elements.authSubtitle.textContent =
-      "Use your registered email address and password to access the store workspace on this browser.";
+      cloudMode
+        ? "Use your registered email address and password to access the shared store workspace."
+        : "Use your registered email address and password to access the store workspace on this browser.";
   }
 }
 
@@ -324,7 +323,334 @@ function renderVisibility() {
   elements.adminShell.hidden = !currentAdmin;
 }
 
+async function syncInterface() {
+  if (cloudMode) {
+    await syncCloudInterface();
+    return;
+  }
+
+  currentAdmin = resolveCurrentAdmin();
+  currentAccount = resolveCurrentAccount();
+  state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
+  renderAuthMode();
+  renderVisibility();
+
+  if (currentAdmin) {
+    stopCameraScanner({ silent: true });
+    resetAuthForms();
+    renderAdminDashboard();
+  } else if (currentAccount) {
+    resetAuthForms();
+    renderAll();
+  } else {
+    stopCameraScanner({ silent: true });
+    document.title = "Tindahan Tracker | Inventory Management Suite";
+    setAuthMessage(defaultAuthMessage());
+  }
+}
+
+async function syncCloudInterface() {
+  renderAuthMode();
+
+  const {
+    data: { session: authSession },
+    error: sessionError,
+  } = await supabaseClient.auth.getSession();
+
+  if (sessionError) {
+    console.error("Unable to restore Supabase session.", sessionError);
+    setAuthMessage("Unable to restore the cloud session right now. Please try again.", "danger");
+    return;
+  }
+
+  if (!authSession?.user) {
+    session = null;
+    currentAccount = null;
+    currentAdmin = null;
+    adminRecord = null;
+    accounts = [];
+    remoteStoreMap = {};
+    state = buildEmptyState();
+    stopCameraScanner({ silent: true });
+    renderVisibility();
+    document.title = "Tindahan Tracker | Inventory Management Suite";
+    setAuthMessage(defaultAuthMessage());
+    return;
+  }
+
+  const profile = await ensureCloudProfile(authSession.user);
+  if (!profile) {
+    session = null;
+    currentAccount = null;
+    currentAdmin = null;
+    adminRecord = null;
+    accounts = [];
+    remoteStoreMap = {};
+    state = buildEmptyState();
+    stopCameraScanner({ silent: true });
+    renderVisibility();
+    setAuthMessage("Unable to load the cloud account profile right now. Please try again.", "danger");
+    return;
+  }
+
+  session = {
+    role: normalizeCloudRole(profile.role),
+    id: profile.user_id,
+  };
+
+  if (session.role === "admin") {
+    stopCameraScanner({ silent: true });
+    currentAccount = null;
+    currentAdmin = buildCloudAdmin(profile);
+    adminRecord = currentAdmin;
+    state = buildEmptyState();
+    resetAuthForms();
+    await loadCloudAdminWorkspace();
+    renderVisibility();
+    renderAdminDashboard();
+    return;
+  }
+
+  currentAdmin = null;
+  adminRecord = null;
+  currentAccount = buildCloudAccount(profile);
+  accounts = [];
+  remoteStoreMap = {};
+  state = await loadCloudStateForUser(currentAccount.id, currentAccount.storeName);
+  if (!state) {
+    state = buildEmptyState();
+    renderVisibility();
+    renderAll();
+    setFeedback("Shared data tables are not ready yet. Run supabase-setup.sql in your Supabase project.", "danger");
+    return;
+  }
+  remoteStoreMap[currentAccount.id] = normalizeState(state);
+  resetAuthForms();
+  renderVisibility();
+  renderAll();
+}
+
+function normalizeCloudRole(role) {
+  return `${role || "store"}`.toLowerCase() === "admin" ? "admin" : "store";
+}
+
+function buildCloudAccount(profile) {
+  return {
+    id: `${profile.user_id}`,
+    storeName: `${profile.store_name || "My Store"}`.trim() || "My Store",
+    ownerName: `${profile.owner_name || "Store Owner"}`.trim() || "Store Owner",
+    email: normalizeEmail(profile.email),
+    createdAt: normalizeDate(profile.created_at),
+    lastLoginAt: normalizeDate(profile.last_login_at || profile.created_at),
+  };
+}
+
+function buildCloudAdmin(profile) {
+  return {
+    id: `${profile.user_id}`,
+    name: `${profile.owner_name || "Administrator"}`.trim() || "Administrator",
+    email: normalizeEmail(profile.email),
+    createdAt: normalizeDate(profile.created_at),
+    lastLoginAt: normalizeDate(profile.last_login_at || profile.created_at),
+  };
+}
+
+async function loadCloudProfile(userId) {
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select("user_id, role, store_name, owner_name, email, created_at, updated_at, last_login_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Unable to load Supabase profile.", error);
+    return null;
+  }
+
+  return data;
+}
+
+async function ensureCloudProfile(user) {
+  const existingProfile = await loadCloudProfile(user.id);
+  const metadata = user.user_metadata || {};
+  const preferredRole = existingProfile?.role || normalizeCloudRole(metadata.role);
+  const payload = {
+    user_id: user.id,
+    role: preferredRole,
+    store_name: `${existingProfile?.store_name || metadata.store_name || "My Store"}`.trim() || "My Store",
+    owner_name:
+      `${existingProfile?.owner_name || metadata.owner_name || metadata.display_name || "Store Owner"}`.trim() ||
+      "Store Owner",
+    email: normalizeEmail(existingProfile?.email || user.email || metadata.email || ""),
+    last_login_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .upsert(payload, { onConflict: "user_id" })
+    .select("user_id, role, store_name, owner_name, email, created_at, updated_at, last_login_at")
+    .single();
+
+  if (error) {
+    console.error("Unable to upsert Supabase profile.", error);
+    return null;
+  }
+
+  return data;
+}
+
+async function loadCloudStateForUser(userId, storeName) {
+  const [productsResult, transactionsResult, activityResult] = await Promise.all([
+    supabaseClient
+      .from("products")
+      .select("id, user_id, sku, name, category, unit, price, stock, reorder_level, updated_at, created_at")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false }),
+    supabaseClient
+      .from("transactions")
+      .select("id, user_id, type, product_id, product_name, quantity, unit, unit_price, total, note, occurred_at")
+      .eq("user_id", userId)
+      .order("occurred_at", { ascending: false })
+      .limit(160),
+    supabaseClient
+      .from("activity")
+      .select("id, user_id, kind, message, product_id, product_name, occurred_at")
+      .eq("user_id", userId)
+      .order("occurred_at", { ascending: false })
+      .limit(80),
+  ]);
+
+  if (productsResult.error || transactionsResult.error || activityResult.error) {
+    console.error("Unable to load shared store data.", {
+      productsError: productsResult.error,
+      transactionsError: transactionsResult.error,
+      activityError: activityResult.error,
+    });
+
+    return null;
+  }
+
+  const normalized = normalizeState({
+    products: (productsResult.data || []).map(mapDatabaseProduct),
+    transactions: (transactionsResult.data || []).map(mapDatabaseTransaction),
+    activity: (activityResult.data || []).map(mapDatabaseActivity),
+  });
+
+  return normalized.activity.length || normalized.products.length || normalized.transactions.length
+    ? normalized
+    : buildFreshStoreState(storeName);
+}
+
+async function loadCloudAdminWorkspace() {
+  const [profilesResult, productsResult, transactionsResult, activityResult] = await Promise.all([
+    supabaseClient
+      .from("profiles")
+      .select("user_id, role, store_name, owner_name, email, created_at, updated_at, last_login_at")
+      .eq("role", "store")
+      .order("created_at", { ascending: false }),
+    supabaseClient
+      .from("products")
+      .select("id, user_id, sku, name, category, unit, price, stock, reorder_level, updated_at, created_at"),
+    supabaseClient
+      .from("transactions")
+      .select("id, user_id, type, product_id, product_name, quantity, unit, unit_price, total, note, occurred_at")
+      .order("occurred_at", { ascending: false })
+      .limit(2000),
+    supabaseClient
+      .from("activity")
+      .select("id, user_id, kind, message, product_id, product_name, occurred_at")
+      .order("occurred_at", { ascending: false })
+      .limit(2000),
+  ]);
+
+  if (profilesResult.error || productsResult.error || transactionsResult.error || activityResult.error) {
+    console.error("Unable to load shared admin workspace.", {
+      profilesError: profilesResult.error,
+      productsError: productsResult.error,
+      transactionsError: transactionsResult.error,
+      activityError: activityResult.error,
+    });
+    accounts = [];
+    remoteStoreMap = {};
+    setAdminFeedback("Unable to load the shared workspace right now.", "danger");
+    return;
+  }
+
+  accounts = (profilesResult.data || []).map(buildCloudAccount);
+  remoteStoreMap = {};
+
+  accounts.forEach((account) => {
+    remoteStoreMap[account.id] = buildEmptyState();
+  });
+
+  (productsResult.data || []).forEach((row) => {
+    const userId = `${row.user_id}`;
+    remoteStoreMap[userId] = remoteStoreMap[userId] || buildEmptyState();
+    remoteStoreMap[userId].products.push(mapDatabaseProduct(row));
+  });
+
+  (transactionsResult.data || []).forEach((row) => {
+    const userId = `${row.user_id}`;
+    remoteStoreMap[userId] = remoteStoreMap[userId] || buildEmptyState();
+    remoteStoreMap[userId].transactions.push(mapDatabaseTransaction(row));
+  });
+
+  (activityResult.data || []).forEach((row) => {
+    const userId = `${row.user_id}`;
+    remoteStoreMap[userId] = remoteStoreMap[userId] || buildEmptyState();
+    remoteStoreMap[userId].activity.push(mapDatabaseActivity(row));
+  });
+
+  Object.keys(remoteStoreMap).forEach((userId) => {
+    remoteStoreMap[userId] = normalizeState(remoteStoreMap[userId]);
+  });
+}
+
+function mapDatabaseProduct(row) {
+  return {
+    id: row.id,
+    sku: normalizeCode(row.sku),
+    name: row.name,
+    category: row.category,
+    unit: row.unit,
+    price: roundMoney(row.price),
+    stock: roundNumber(row.stock),
+    reorderLevel: roundNumber(row.reorder_level),
+    updatedAt: normalizeDate(row.updated_at),
+  };
+}
+
+function mapDatabaseTransaction(row) {
+  return {
+    id: row.id,
+    type: row.type,
+    productId: `${row.product_id || ""}`,
+    productName: row.product_name,
+    quantity: roundNumber(row.quantity),
+    unit: row.unit,
+    unitPrice: roundMoney(row.unit_price),
+    total: roundMoney(row.total),
+    note: `${row.note || ""}`.trim(),
+    occurredAt: normalizeDate(row.occurred_at),
+  };
+}
+
+function mapDatabaseActivity(row) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    message: row.message,
+    productId: `${row.product_id || ""}`,
+    productName: `${row.product_name || ""}`,
+    occurredAt: normalizeDate(row.occurred_at),
+  };
+}
+
 function loadAccounts() {
+  if (cloudMode) {
+    return accounts;
+  }
+
   const saved = localStorage.getItem(ACCOUNTS_KEY);
 
   if (!saved) {
@@ -341,10 +667,18 @@ function loadAccounts() {
 }
 
 function saveAccounts() {
+  if (cloudMode) {
+    return;
+  }
+
   localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
 }
 
 function loadAdminRecord() {
+  if (cloudMode) {
+    return adminRecord;
+  }
+
   const saved = localStorage.getItem(ADMIN_KEY);
 
   if (!saved) {
@@ -360,6 +694,10 @@ function loadAdminRecord() {
 }
 
 function saveAdminRecord() {
+  if (cloudMode) {
+    return;
+  }
+
   if (!adminRecord) {
     localStorage.removeItem(ADMIN_KEY);
     return;
@@ -369,6 +707,10 @@ function saveAdminRecord() {
 }
 
 function loadSession() {
+  if (cloudMode) {
+    return session;
+  }
+
   const saved = localStorage.getItem(SESSION_KEY);
 
   if (!saved) {
@@ -396,16 +738,30 @@ function loadSession() {
 }
 
 function saveSession(role, id) {
+  if (cloudMode) {
+    session = { role, id };
+    return;
+  }
+
   session = { role, id };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 function clearSession() {
+  if (cloudMode) {
+    session = null;
+    return;
+  }
+
   session = null;
   localStorage.removeItem(SESSION_KEY);
 }
 
 function resolveCurrentAccount() {
+  if (cloudMode) {
+    return currentAccount;
+  }
+
   if (!session?.id || session.role !== "store") {
     return null;
   }
@@ -414,6 +770,10 @@ function resolveCurrentAccount() {
 }
 
 function resolveCurrentAdmin() {
+  if (cloudMode) {
+    return currentAdmin;
+  }
+
   if (!session?.id || session.role !== "admin" || !adminRecord) {
     return null;
   }
@@ -455,6 +815,10 @@ function normalizeAdminRecord(admin) {
 }
 
 function loadStoreMap() {
+  if (cloudMode) {
+    return remoteStoreMap;
+  }
+
   const saved = localStorage.getItem(STORE_DATA_KEY);
 
   if (!saved) {
@@ -471,10 +835,19 @@ function loadStoreMap() {
 }
 
 function saveStoreMap(storeMap) {
+  if (cloudMode) {
+    remoteStoreMap = storeMap;
+    return;
+  }
+
   localStorage.setItem(STORE_DATA_KEY, JSON.stringify(storeMap));
 }
 
 function initializeStoreStateForAccount(account) {
+  if (cloudMode) {
+    return normalizeState(remoteStoreMap[account.id] || buildFreshStoreState(account.storeName));
+  }
+
   const storeMap = loadStoreMap();
 
   if (storeMap[account.id]) {
@@ -756,6 +1129,24 @@ function normalizeDate(value) {
   return Number.isNaN(candidate.getTime()) ? new Date().toISOString() : candidate.toISOString();
 }
 
+function mapSupabaseAuthError(error, fallbackMessage) {
+  const message = `${error?.message || fallbackMessage || "Authentication failed."}`.toLowerCase();
+
+  if (message.includes("email not confirmed")) {
+    return "Check your email inbox and confirm your account before signing in.";
+  }
+
+  if (message.includes("invalid login credentials")) {
+    return "That email address or password is incorrect.";
+  }
+
+  if (message.includes("user already registered")) {
+    return "An account with that email already exists. Log in instead.";
+  }
+
+  return error?.message || fallbackMessage || "Authentication failed.";
+}
+
 async function handleSignupSubmit(event) {
   event.preventDefault();
 
@@ -777,6 +1168,40 @@ async function handleSignupSubmit(event) {
 
   if (password !== confirmPassword) {
     setAuthMessage("The passwords do not match.", "danger");
+    return;
+  }
+
+  if (cloudMode) {
+    const { data, error } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          store_name: storeName,
+          owner_name: ownerName,
+          role: "store",
+        },
+      },
+    });
+
+    if (error) {
+      setAuthMessage(mapSupabaseAuthError(error, "Unable to create the shared account."), "danger");
+      return;
+    }
+
+    resetAuthForms();
+
+    if (data.session?.user) {
+      await syncInterface();
+      setFeedback(`Welcome, ${ownerName}. ${storeName} is now available on your shared workspace.`, "success");
+    } else {
+      setAuthMode("login");
+      elements.loginEmail.value = email;
+      setAuthMessage(
+        "Account created. Confirm the email from Supabase, then sign in on any device.",
+        "success"
+      );
+    }
     return;
   }
 
@@ -819,6 +1244,28 @@ async function handleLoginSubmit(event) {
 
   const email = normalizeEmail(elements.loginEmail.value);
   const password = elements.loginPassword.value;
+
+  if (cloudMode) {
+    const { error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setAuthMessage(mapSupabaseAuthError(error, "Unable to sign in to the shared workspace."), "danger");
+      return;
+    }
+
+    elements.loginPassword.value = "";
+    await syncInterface();
+    if (currentAccount) {
+      setFeedback(`Welcome back, ${currentAccount.ownerName}.`, "success");
+    } else if (currentAdmin) {
+      setAdminFeedback(`Welcome back, ${currentAdmin.name}.`, "success");
+    }
+    return;
+  }
+
   const account = accounts.find((entry) => entry.email === email);
 
   if (!account) {
@@ -847,6 +1294,19 @@ async function handleLoginSubmit(event) {
 }
 
 function renderAdminAuthMode() {
+  if (cloudMode) {
+    elements.authTitle.textContent = "Administrator sign in";
+    elements.authSubtitle.textContent =
+      "Use an administrator account connected to the shared Supabase workspace to review all store accounts.";
+    elements.adminSetupFields.hidden = true;
+    elements.adminLoginFields.hidden = false;
+    elements.adminModeNote.querySelector("span").textContent = "Cloud Administrator";
+    elements.adminModeNote.querySelector("p").textContent =
+      "Administrator access is assigned in Supabase by setting the profile role to admin.";
+    elements.adminSubmit.textContent = "Open Administrative Panel";
+    return;
+  }
+
   const hasAdmin = Boolean(adminRecord);
 
   elements.authTitle.textContent = hasAdmin ? "Administrator sign in" : "Administrator setup";
@@ -866,20 +1326,68 @@ function renderAdminAuthMode() {
 
 function defaultAuthMessage() {
   if (authMode === "signup") {
-    return "Register a store account to begin using the inventory workspace.";
+    return cloudMode
+      ? "Register a store account to begin using the shared inventory workspace."
+      : "Register a store account to begin using the inventory workspace.";
   }
 
   if (authMode === "admin") {
+    if (cloudMode) {
+      return "Sign in with an administrator account to review all shared store accounts.";
+    }
+
     return adminRecord
       ? "Sign in as the browser administrator to review locally stored store accounts."
       : "Create the administrator account for this browser to review locally stored store accounts.";
   }
 
-  return "Use your registered email address and password to access the store workspace on this browser.";
+  return cloudMode
+    ? "Use your registered email address and password to access the shared store workspace."
+    : "Use your registered email address and password to access the store workspace on this browser.";
 }
 
 async function handleAdminSubmit(event) {
   event.preventDefault();
+
+  if (cloudMode) {
+    const email = normalizeEmail(elements.adminLoginEmail.value || elements.adminEmail.value);
+    const password = elements.adminLoginPassword.value || elements.adminPassword.value;
+
+    if (!email) {
+      setAuthMessage("Enter the administrator email before continuing.", "danger");
+      return;
+    }
+
+    if (password.length < 6) {
+      setAuthMessage("Administrator password must be at least 6 characters.", "danger");
+      return;
+    }
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      setAuthMessage(mapSupabaseAuthError(error, "Unable to sign in as administrator."), "danger");
+      return;
+    }
+
+    const profile = await ensureCloudProfile(data.user || data.session?.user);
+    if (!profile || normalizeCloudRole(profile.role) !== "admin") {
+      await supabaseClient.auth.signOut();
+      setAuthMessage(
+        "This account does not have administrator access yet. Set its profile role to admin in Supabase first.",
+        "danger"
+      );
+      return;
+    }
+
+    elements.adminLoginPassword.value = "";
+    await syncInterface();
+    setAdminFeedback(`Welcome back, ${profile.owner_name || "Administrator"}.`, "success");
+    return;
+  }
 
   if (!adminRecord) {
     const name = elements.adminName.value.trim();
@@ -957,6 +1465,21 @@ async function handleAdminSubmit(event) {
 
 function logoutCurrentAccount() {
   stopCameraScanner({ silent: true });
+
+  if (cloudMode) {
+    void supabaseClient.auth.signOut();
+    currentAccount = null;
+    currentAdmin = null;
+    state = buildEmptyState();
+    accounts = [];
+    remoteStoreMap = {};
+    resetAppForms();
+    renderVisibility();
+    setAuthMode("login");
+    setAuthMessage("You have signed out of the shared workspace.", "success");
+    return;
+  }
+
   clearSession();
   currentAccount = null;
   currentAdmin = null;
@@ -969,6 +1492,20 @@ function logoutCurrentAccount() {
 
 function logoutAdmin() {
   stopCameraScanner({ silent: true });
+
+  if (cloudMode) {
+    void supabaseClient.auth.signOut();
+    currentAdmin = null;
+    currentAccount = null;
+    state = buildEmptyState();
+    accounts = [];
+    remoteStoreMap = {};
+    renderVisibility();
+    setAuthMode("admin");
+    setAuthMessage("Administrator signed out of the shared workspace.", "success");
+    return;
+  }
+
   clearSession();
   currentAdmin = null;
   currentAccount = null;
@@ -1031,7 +1568,9 @@ function renderAccountProfile() {
   elements.storeSubtitle.textContent =
     `${currentAccount.ownerName} can manage products, sales records, and restock entries from one structured workspace.`;
   elements.accountBadge.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
-  elements.sessionNote.textContent = "Each store account is maintained separately on this browser.";
+  elements.sessionNote.textContent = cloudMode
+    ? "This store account is synced through the shared cloud workspace."
+    : "Each store account is maintained separately on this browser.";
   elements.storeNameDisplay.textContent = currentAccount.storeName;
   elements.storeOwnerDisplay.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
 }
@@ -1039,21 +1578,108 @@ function renderAccountProfile() {
 function renderAdminProfile() {
   const summaries = getAdminStoreSummaries();
   elements.adminTodayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
-  elements.adminCoverageNote.textContent = `Reviewing ${summaries.length} locally stored store account${
+  elements.adminCoverageNote.textContent = `Reviewing ${summaries.length} ${
+    cloudMode ? "shared" : "locally stored"
+  } store account${
     summaries.length === 1 ? "" : "s"
   }.`;
   elements.adminNameDisplay.textContent = currentAdmin.name;
   elements.adminEmailDisplay.textContent = currentAdmin.email;
 }
 
-function saveState() {
+async function saveState() {
   if (!currentAccount) {
-    return;
+    return true;
+  }
+
+  const normalized = normalizeState(state);
+
+  if (cloudMode) {
+    remoteStoreMap[currentAccount.id] = normalized;
+    return persistCloudState(currentAccount.id, normalized);
   }
 
   const storeMap = loadStoreMap();
-  storeMap[currentAccount.id] = normalizeState(state);
+  storeMap[currentAccount.id] = normalized;
   saveStoreMap(storeMap);
+  return true;
+}
+
+async function persistCloudState(userId, storeState) {
+  const normalizedState = normalizeState(storeState);
+  const productsPayload = normalizedState.products.map((product) => ({
+    id: product.id,
+    user_id: userId,
+    sku: normalizeCode(product.sku),
+    name: product.name,
+    category: product.category,
+    unit: product.unit,
+    price: roundMoney(product.price),
+    stock: roundNumber(product.stock),
+    reorder_level: roundNumber(product.reorderLevel),
+    updated_at: normalizeDate(product.updatedAt),
+  }));
+  const transactionsPayload = normalizedState.transactions.map((transaction) => ({
+    id: transaction.id,
+    user_id: userId,
+    type: transaction.type,
+    product_id: transaction.productId || null,
+    product_name: transaction.productName,
+    quantity: roundNumber(transaction.quantity),
+    unit: transaction.unit,
+    unit_price: roundMoney(transaction.unitPrice),
+    total: roundMoney(transaction.total),
+    note: `${transaction.note || ""}`.trim(),
+    occurred_at: normalizeDate(transaction.occurredAt),
+  }));
+  const activityPayload = normalizedState.activity.map((activity) => ({
+    id: activity.id,
+    user_id: userId,
+    kind: activity.kind,
+    message: activity.message,
+    product_id: activity.productId || null,
+    product_name: activity.productName || "",
+    occurred_at: normalizeDate(activity.occurredAt),
+  }));
+
+  const [deleteProducts, deleteTransactions, deleteActivity] = await Promise.all([
+    supabaseClient.from("products").delete().eq("user_id", userId),
+    supabaseClient.from("transactions").delete().eq("user_id", userId),
+    supabaseClient.from("activity").delete().eq("user_id", userId),
+  ]);
+
+  if (deleteProducts.error || deleteTransactions.error || deleteActivity.error) {
+    console.error("Unable to clear existing cloud rows before save.", {
+      deleteProducts: deleteProducts.error,
+      deleteTransactions: deleteTransactions.error,
+      deleteActivity: deleteActivity.error,
+    });
+    return false;
+  }
+
+  const writes = [];
+  if (productsPayload.length) {
+    writes.push(supabaseClient.from("products").insert(productsPayload));
+  }
+  if (transactionsPayload.length) {
+    writes.push(supabaseClient.from("transactions").insert(transactionsPayload));
+  }
+  if (activityPayload.length) {
+    writes.push(supabaseClient.from("activity").insert(activityPayload));
+  }
+
+  if (!writes.length) {
+    return true;
+  }
+
+  const results = await Promise.all(writes);
+  const failed = results.find((result) => result.error);
+  if (failed) {
+    console.error("Unable to write cloud store data.", failed.error);
+    return false;
+  }
+
+  return true;
 }
 
 function renderStats() {
@@ -1100,9 +1726,13 @@ function renderAdminStats() {
   const riskStores = summaries.filter((summary) => summary.lowStockCount > 0).length;
 
   elements.adminTotalUsers.textContent = numberFormatter.format(totalUsers);
-  elements.adminUsersFoot.textContent = `${totalUsers} store account${totalUsers === 1 ? "" : "s"} registered on this browser`;
+  elements.adminUsersFoot.textContent = `${totalUsers} store account${totalUsers === 1 ? "" : "s"} ${
+    cloudMode ? "registered in the shared workspace" : "registered on this browser"
+  }`;
   elements.adminTotalProducts.textContent = numberFormatter.format(totalProducts);
-  elements.adminProductsFoot.textContent = `${totalProducts} products recorded across all local stores`;
+  elements.adminProductsFoot.textContent = `${totalProducts} products recorded across all ${
+    cloudMode ? "shared" : "local"
+  } stores`;
   elements.adminTotalValue.textContent = currencyFormatter.format(totalValue);
   elements.adminValueFoot.textContent = `Today's combined sales: ${currencyFormatter.format(totalTodaySales)}`;
   elements.adminRiskStores.textContent = numberFormatter.format(riskStores);
@@ -1119,7 +1749,9 @@ function renderAdminUsersTable() {
       <tr>
         <td colspan="8">
           <div class="empty-state">
-            No store accounts have been registered on this browser yet.
+            ${cloudMode
+              ? "No store accounts have been registered in the shared workspace yet."
+              : "No store accounts have been registered on this browser yet."}
           </div>
         </td>
       </tr>
@@ -1154,10 +1786,14 @@ function renderAdminUsersTable() {
       .join("");
   }
 
-  elements.adminSummaryText.textContent = `Showing ${summaries.length} locally stored store account${
+  elements.adminSummaryText.textContent = `Showing ${summaries.length} ${
+    cloudMode ? "shared" : "locally stored"
+  } store account${
     summaries.length === 1 ? "" : "s"
   }`;
-  elements.adminSummaryNote.textContent = "This panel reports only on accounts saved on this browser and device.";
+  elements.adminSummaryNote.textContent = cloudMode
+    ? "This panel reports on all accounts in the shared Supabase workspace."
+    : "This panel reports only on accounts saved on this browser and device.";
 }
 
 function renderAdminAttentionList() {
@@ -1168,7 +1804,9 @@ function renderAdminAttentionList() {
   if (!flaggedStores.length) {
     elements.adminAttentionList.innerHTML = `
       <div class="empty-state">
-        No local stores are currently below their reorder levels.
+        ${cloudMode
+          ? "No shared stores are currently below their reorder levels."
+          : "No local stores are currently below their reorder levels."}
       </div>
     `;
     return;
@@ -1547,17 +2185,19 @@ function handleProductSubmit(event) {
   if (existingIndex >= 0) {
     state.products[existingIndex] = product;
     addActivity("product-updated", `Updated product details for ${product.name}.`, product);
-    saveAndRefresh(`${product.name} was updated.`, "success");
+    if (await saveAndRefresh(`${product.name} was updated.`, "success")) {
+      resetProductForm();
+    }
   } else {
     state.products.unshift(product);
     addActivity("product-created", `Added ${product.name} to your product list.`, product);
-    saveAndRefresh(`${product.name} was added to inventory.`, "success");
+    if (await saveAndRefresh(`${product.name} was added to inventory.`, "success")) {
+      resetProductForm();
+    }
   }
-
-  resetProductForm();
 }
 
-function recordSale(product, quantity, note, options = {}) {
+async function recordSale(product, quantity, note, options = {}) {
   if (!product) {
     return { ok: false, message: "Choose a product before recording a sale." };
   }
@@ -1594,19 +2234,22 @@ function recordSale(product, quantity, note, options = {}) {
     options.activityMessage || `Logged sale for ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
     product
   );
-  saveAndRefresh(options.feedbackMessage || `${product.name} sale saved.`, "success");
+  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} sale saved.`, "success");
+  if (!saved) {
+    return { ok: false, message: "The sale could not be synchronized to the shared workspace." };
+  }
 
   return { ok: true, product };
 }
 
-function handleSaleSubmit(event) {
+async function handleSaleSubmit(event) {
   event.preventDefault();
 
   const product = getProductById(elements.saleProduct.value);
   const quantity = roundNumber(elements.saleQuantity.value);
   const note = elements.saleNote.value.trim();
 
-  const result = recordSale(product, quantity, note);
+  const result = await recordSale(product, quantity, note);
   if (!result.ok) {
     setFeedback(result.message, "danger");
     return;
@@ -1616,7 +2259,7 @@ function handleSaleSubmit(event) {
   updateSalePreview();
 }
 
-function handleRestockSubmit(event) {
+async function handleRestockSubmit(event) {
   event.preventDefault();
 
   const product = getProductById(elements.restockProduct.value);
@@ -1650,9 +2293,10 @@ function handleRestockSubmit(event) {
   });
 
   addActivity("restock", `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`, product);
-  saveAndRefresh(`${product.name} restock saved.`, "success");
-  elements.restockForm.reset();
-  updateRestockPreview();
+  if (await saveAndRefresh(`${product.name} restock saved.`, "success")) {
+    elements.restockForm.reset();
+    updateRestockPreview();
+  }
 }
 
 function handleInventoryActions(event) {
@@ -1669,7 +2313,7 @@ function handleInventoryActions(event) {
   }
 
   if (button.dataset.action === "delete") {
-    deleteProduct(productId);
+    void deleteProduct(productId);
   }
 }
 
@@ -1704,7 +2348,7 @@ function startEditingProduct(productId) {
   elements.productForm.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function deleteProduct(productId) {
+async function deleteProduct(productId) {
   const product = getProductById(productId);
 
   if (!product) {
@@ -1719,9 +2363,9 @@ function deleteProduct(productId) {
 
   state.products = state.products.filter((item) => item.id !== productId);
   addActivity("product-deleted", `Removed ${product.name} from your product list.`, product);
-  saveAndRefresh(`${product.name} was deleted.`, "warning");
+  const saved = await saveAndRefresh(`${product.name} was deleted.`, "warning");
 
-  if (elements.productId.value === productId) {
+  if (saved && elements.productId.value === productId) {
     resetProductForm();
   }
 }
@@ -1966,7 +2610,7 @@ async function processScannedCode(rawCode, source) {
     return;
   }
 
-  const result = recordSale(product, 1, `${source === "camera" ? "Camera" : "Manual"} barcode scan: ${code}`, {
+  const result = await recordSale(product, 1, `${source === "camera" ? "Camera" : "Manual"} barcode scan: ${code}`, {
     activityMessage: `Recorded barcode sale for 1 ${product.unit} of ${product.name}.`,
     feedbackMessage: `${product.name} was sold from barcode scan.`,
   });
@@ -2055,13 +2699,14 @@ function importStateFromFile(event) {
   }
 
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
       const parsed = JSON.parse(`${reader.result || "{}"}`);
       state = normalizeState(parsed.state ?? parsed);
       addActivity("import", "Imported a backup file into the inventory workspace.", null);
-      saveAndRefresh("Backup imported successfully.", "success");
-      resetProductForm();
+      if (await saveAndRefresh("Backup imported successfully.", "success")) {
+        resetProductForm();
+      }
     } catch (error) {
       console.error("Unable to import backup.", error);
       setFeedback("That backup file could not be imported. Please use a valid JSON export.", "danger");
@@ -2072,7 +2717,7 @@ function importStateFromFile(event) {
   reader.readAsText(file);
 }
 
-function resetToDemoState() {
+async function resetToDemoState() {
   const confirmed = window.confirm(
     "Load the demonstration inventory into this store account? This will replace the current saved data."
   );
@@ -2082,14 +2727,21 @@ function resetToDemoState() {
 
   state = buildDefaultState();
   addActivity("reset", "Loaded the demonstration inventory dataset.", null);
-  saveAndRefresh("Demonstration inventory loaded.", "warning");
-  resetProductForm();
+  if (await saveAndRefresh("Demonstration inventory loaded.", "warning")) {
+    resetProductForm();
+  }
 }
 
-function saveAndRefresh(message, tone) {
-  saveState();
+async function saveAndRefresh(message, tone) {
+  const saved = await saveState();
   renderAll();
+  if (!saved) {
+    setFeedback("The change could not be synchronized to the shared workspace. Please try again.", "danger");
+    return false;
+  }
+
   setFeedback(message, tone);
+  return true;
 }
 
 function addActivity(kind, message, product) {

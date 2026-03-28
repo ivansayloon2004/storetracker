@@ -22,8 +22,8 @@
 
         <div class="auth-feature-grid">
           <article class="auth-feature-card">
-            <strong>Store-level data separation</strong>
-            <p>Each store account maintains its own inventory records, sales history, and restock activity on this browser.</p>
+            <strong>Shared store sync</strong>
+            <p>After Supabase configuration, the same store account can be used across phone and desktop with one shared inventory.</p>
           </article>
 
           <article class="auth-feature-card">
@@ -33,14 +33,14 @@
 
           <article class="auth-feature-card">
             <strong>Controlled backup exports</strong>
-            <p>Store owners can export their own records, while administrators can review locally stored user data in one place.</p>
+            <p>Store owners can export their own records, while administrators can review workspace activity in one place.</p>
           </article>
         </div>
 
         <div class="auth-note">
           <span>Deployment Scope</span>
           <p>
-            This version monitors all accounts saved on the current browser and device. For centralized monitoring across multiple phones and computers, the next step is a shared backend service.
+            Shared phone-and-desktop login is available after you connect a Supabase project in <code>supabase-config.js</code> and run the included SQL setup file.
           </p>
         </div>
       </section>
@@ -642,6 +642,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
