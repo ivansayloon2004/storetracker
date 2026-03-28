@@ -145,8 +145,43 @@ const elements = {
   adminOwnerList: document.querySelector("#admin-owner-list"),
 };
 
+setupSegmentedTabs();
 setupEventListeners();
 syncInterface();
+
+function setupSegmentedTabs() {
+  const buttons = document.querySelectorAll("[data-tab-group][data-tab-target]");
+  const initializedGroups = new Set();
+
+  buttons.forEach((button) => {
+    if (!initializedGroups.has(button.dataset.tabGroup) && button.classList.contains("is-active")) {
+      initializedGroups.add(button.dataset.tabGroup);
+      activateTab(button.dataset.tabGroup, button.dataset.tabTarget);
+    }
+
+    button.addEventListener("click", () => {
+      activateTab(button.dataset.tabGroup, button.dataset.tabTarget);
+    });
+  });
+}
+
+function activateTab(group, targetId) {
+  const buttons = document.querySelectorAll(`[data-tab-group="${group}"]`);
+  const panels = document.querySelectorAll(`[data-tab-panel="${group}"]`);
+
+  buttons.forEach((button) => {
+    const isActive = button.dataset.tabTarget === targetId;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.setAttribute("tabindex", isActive ? "0" : "-1");
+  });
+
+  panels.forEach((panel) => {
+    const isActive = panel.id === targetId;
+    panel.classList.toggle("is-active", isActive);
+    panel.hidden = !isActive;
+  });
+}
 
 function setupEventListeners() {
   elements.loginTab.addEventListener("click", () => setAuthMode("login"));
@@ -1598,6 +1633,7 @@ function startEditingProduct(productId) {
     return;
   }
 
+  activateTab("store-ops", "ops-product");
   elements.productFormTitle.textContent = "Edit product";
   elements.productSubmit.textContent = "Update Product";
   elements.productId.value = product.id;

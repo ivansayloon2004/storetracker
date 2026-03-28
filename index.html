@@ -202,260 +202,267 @@
       </div>
     </header>
 
-    <section class="stats-grid" aria-label="Store summary">
-      <article class="panel stat-card">
-        <p class="stat-label">Tracked Products</p>
-        <h2 class="stat-value" id="total-skus">0</h2>
-        <p class="stat-foot" id="total-units-foot">0 units on hand</p>
-      </article>
+    <div class="dashboard-grid store-dashboard-grid">
+      <section class="dashboard-main">
+        <section class="stats-grid" aria-label="Store summary">
+          <article class="panel stat-card">
+            <p class="stat-label">Tracked Products</p>
+            <h2 class="stat-value" id="total-skus">0</h2>
+            <p class="stat-foot" id="total-units-foot">0 units on hand</p>
+          </article>
 
-      <article class="panel stat-card">
-        <p class="stat-label">Retail Stock Value</p>
-        <h2 class="stat-value" id="inventory-value">PHP 0.00</h2>
-        <p class="stat-foot" id="stock-value-foot">Based on your selling price</p>
-      </article>
+          <article class="panel stat-card">
+            <p class="stat-label">Retail Stock Value</p>
+            <h2 class="stat-value" id="inventory-value">PHP 0.00</h2>
+            <p class="stat-foot" id="stock-value-foot">Based on your selling price</p>
+          </article>
 
-      <article class="panel stat-card">
-        <p class="stat-label">Sales Today</p>
-        <h2 class="stat-value" id="today-sales">PHP 0.00</h2>
-        <p class="stat-foot" id="today-sales-foot">0 sales logged today</p>
-      </article>
+          <article class="panel stat-card">
+            <p class="stat-label">Sales Today</p>
+            <h2 class="stat-value" id="today-sales">PHP 0.00</h2>
+            <p class="stat-foot" id="today-sales-foot">0 sales logged today</p>
+          </article>
 
-      <article class="panel stat-card">
-        <p class="stat-label">Low Stock Watch</p>
-        <h2 class="stat-value" id="low-stock-count">0</h2>
-        <p class="stat-foot" id="low-stock-foot">No stock alerts at present</p>
-      </article>
-    </section>
+          <article class="panel stat-card">
+            <p class="stat-label">Low Stock Watch</p>
+            <h2 class="stat-value" id="low-stock-count">0</h2>
+            <p class="stat-foot" id="low-stock-foot">No stock alerts at present</p>
+          </article>
+        </section>
 
-    <section class="workspace-grid">
-      <section class="panel inventory-panel" aria-labelledby="inventory-heading">
-        <div class="panel-head">
-          <div>
-            <p class="eyebrow">Inventory Board</p>
-            <h2 id="inventory-heading">Product inventory</h2>
+        <section class="panel inventory-panel" aria-labelledby="inventory-heading">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Inventory Board</p>
+              <h2 id="inventory-heading">Product inventory</h2>
+            </div>
+            <p class="panel-copy">Search by item name, SKU, or category and review stock status with a consistent operational view.</p>
           </div>
-          <p class="panel-copy">Search by item name, SKU, or category and review stock status with a consistent operational view.</p>
-        </div>
 
-        <div class="toolbar">
-          <label class="field search-field">
-            <span>Search</span>
-            <input id="search-input" type="search" placeholder="Ex. coffee, noodles, canned goods">
-          </label>
+          <div class="toolbar">
+            <label class="field search-field">
+              <span>Search</span>
+              <input id="search-input" type="search" placeholder="Ex. coffee, noodles, canned goods">
+            </label>
 
-          <label class="field">
-            <span>Category</span>
-            <select id="category-filter">
-              <option value="all">All categories</option>
-            </select>
-          </label>
+            <label class="field">
+              <span>Category</span>
+              <select id="category-filter">
+                <option value="all">All categories</option>
+              </select>
+            </label>
 
-          <label class="field">
-            <span>Stock status</span>
-            <select id="stock-filter">
-              <option value="all">All stock levels</option>
-              <option value="healthy">Healthy</option>
-              <option value="watch">Watch</option>
-              <option value="reorder">Reorder</option>
-              <option value="out">Out of stock</option>
-            </select>
-          </label>
-        </div>
+            <label class="field">
+              <span>Stock status</span>
+              <select id="stock-filter">
+                <option value="all">All stock levels</option>
+                <option value="healthy">Healthy</option>
+                <option value="watch">Watch</option>
+                <option value="reorder">Reorder</option>
+                <option value="out">Out of stock</option>
+              </select>
+            </label>
+          </div>
 
-        <div class="inventory-summary">
-          <p id="inventory-summary-text">Showing 0 products</p>
-          <p id="inventory-value-note">Visible stock value: PHP 0.00</p>
-        </div>
+          <div class="inventory-summary">
+            <p id="inventory-summary-text">Showing 0 products</p>
+            <p id="inventory-value-note">Visible stock value: PHP 0.00</p>
+          </div>
 
-        <div class="table-wrap">
-          <table class="inventory-table">
-            <thead>
-              <tr>
-                <th scope="col">Product</th>
-                <th scope="col">Category</th>
-                <th scope="col">Price</th>
-                <th scope="col">Stock</th>
-                <th scope="col">Status</th>
-                <th scope="col">Updated</th>
-                <th scope="col">Actions</th>
-              </tr>
-            </thead>
-            <tbody id="inventory-body"></tbody>
-          </table>
-        </div>
+          <div class="table-wrap">
+            <table class="inventory-table">
+              <thead>
+                <tr>
+                  <th scope="col">Product</th>
+                  <th scope="col">Category</th>
+                  <th scope="col">Price</th>
+                  <th scope="col">Stock</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-body"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
-      <aside class="side-stack">
-        <section class="panel form-panel" aria-labelledby="product-form-title">
+      <aside class="dashboard-side">
+        <section class="panel tabbed-panel" aria-labelledby="operations-title">
           <div class="panel-head compact">
             <div>
-              <p class="eyebrow">Catalog Management</p>
-              <h2 id="product-form-title">Add a product</h2>
+              <p class="eyebrow">Daily Operations</p>
+              <h2 id="operations-title">Store controls</h2>
             </div>
-            <p class="panel-copy">Create a new product record or update an existing item with current stock details.</p>
+            <p class="panel-copy">Manage products, sales, and restocks from one compact control area.</p>
           </div>
 
-          <form class="stack-form" id="product-form">
-            <input id="product-id" type="hidden">
+          <div class="segmented-tabs" role="tablist" aria-label="Store controls">
+            <button class="segment-button is-active" type="button" role="tab" aria-selected="true" data-tab-group="store-ops" data-tab-target="ops-product">
+              Products
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-sale">
+              Sales
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-ops" data-tab-target="ops-restock">
+              Restock
+            </button>
+          </div>
 
-            <label class="field">
-              <span>Product name</span>
-              <input id="product-name" type="text" maxlength="80" placeholder="Ex. Instant noodles" required>
-            </label>
+          <div class="tab-panel is-active" id="ops-product" data-tab-panel="store-ops">
+            <h3 class="tab-section-title" id="product-form-title">Add a product</h3>
+            <p class="section-intro">Create a new product record or update an existing item with current stock details.</p>
+            <form class="stack-form" id="product-form">
+              <input id="product-id" type="hidden">
 
-            <div class="form-grid">
               <label class="field">
-                <span>Category</span>
-                <input id="product-category" type="text" maxlength="40" placeholder="Ex. Snacks" required>
+                <span>Product name</span>
+                <input id="product-name" type="text" maxlength="80" placeholder="Ex. Instant noodles" required>
+              </label>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Category</span>
+                  <input id="product-category" type="text" maxlength="40" placeholder="Ex. Snacks" required>
+                </label>
+
+                <label class="field">
+                  <span>Unit</span>
+                  <input id="product-unit" type="text" maxlength="20" placeholder="Ex. pc, sachet, kg" required>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Selling price (PHP)</span>
+                  <input id="product-price" type="number" min="0" step="0.01" placeholder="0.00" required>
+                </label>
+
+                <label class="field">
+                  <span>Current stock</span>
+                  <input id="product-stock" type="number" min="0" step="0.01" placeholder="0" required>
+                </label>
+              </div>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>Reorder level</span>
+                  <input id="product-reorder" type="number" min="0" step="0.01" placeholder="0" required>
+                </label>
+
+                <label class="field">
+                  <span>SKU or code</span>
+                  <input id="product-sku" type="text" maxlength="30" placeholder="Optional">
+                </label>
+              </div>
+
+              <div class="form-actions">
+                <button class="button primary" id="product-submit" type="submit">Save Product</button>
+                <button class="button ghost" id="product-clear" type="button">Clear Form</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="tab-panel" id="ops-sale" data-tab-panel="store-ops" hidden>
+            <h3 class="tab-section-title">Record a sale</h3>
+            <p class="section-intro">Reduce stock and record the transaction in one controlled step.</p>
+            <form class="stack-form" id="sale-form">
+              <label class="field">
+                <span>Product</span>
+                <select id="sale-product" required></select>
               </label>
 
               <label class="field">
-                <span>Unit</span>
-                <input id="product-unit" type="text" maxlength="20" placeholder="Ex. pc, sachet, kg" required>
-              </label>
-            </div>
-
-            <div class="form-grid">
-              <label class="field">
-                <span>Selling price (PHP)</span>
-                <input id="product-price" type="number" min="0" step="0.01" placeholder="0.00" required>
+                <span>Quantity sold</span>
+                <input id="sale-quantity" type="number" min="0.01" step="0.01" placeholder="0" required>
               </label>
 
               <label class="field">
-                <span>Current stock</span>
-                <input id="product-stock" type="number" min="0" step="0.01" placeholder="0" required>
+                <span>Note</span>
+                <input id="sale-note" type="text" maxlength="80" placeholder="Optional note">
               </label>
-            </div>
 
-            <div class="form-grid">
+              <p class="form-preview" id="sale-preview">Choose a product to preview the sale amount.</p>
+
+              <button class="button primary" type="submit">Record Sale</button>
+            </form>
+          </div>
+
+          <div class="tab-panel" id="ops-restock" data-tab-panel="store-ops" hidden>
+            <h3 class="tab-section-title">Record a restock</h3>
+            <p class="section-intro">Add incoming inventory after supplier delivery and preserve the record immediately.</p>
+            <form class="stack-form" id="restock-form">
               <label class="field">
-                <span>Reorder level</span>
-                <input id="product-reorder" type="number" min="0" step="0.01" placeholder="0" required>
+                <span>Product</span>
+                <select id="restock-product" required></select>
               </label>
 
               <label class="field">
-                <span>SKU or code</span>
-                <input id="product-sku" type="text" maxlength="30" placeholder="Optional">
+                <span>Quantity added</span>
+                <input id="restock-quantity" type="number" min="0.01" step="0.01" placeholder="0" required>
               </label>
-            </div>
 
-            <div class="form-actions">
-              <button class="button primary" id="product-submit" type="submit">Save Product</button>
-              <button class="button ghost" id="product-clear" type="button">Clear Form</button>
-            </div>
-          </form>
+              <label class="field">
+                <span>Note</span>
+                <input id="restock-note" type="text" maxlength="80" placeholder="Optional note">
+              </label>
+
+              <p class="form-preview" id="restock-preview">Choose a product to preview the new stock level.</p>
+
+              <button class="button primary" type="submit">Record Restock</button>
+            </form>
+          </div>
         </section>
 
-        <section class="panel form-panel" aria-labelledby="sale-form-title">
+        <section class="panel tabbed-panel" aria-labelledby="store-insights-title">
           <div class="panel-head compact">
             <div>
-              <p class="eyebrow">Sales Entry</p>
-              <h2 id="sale-form-title">Record a sale</h2>
+              <p class="eyebrow">Store Insights</p>
+              <h2 id="store-insights-title">Operational review</h2>
             </div>
-            <p class="panel-copy">Reduce stock and record the transaction in one controlled step.</p>
+            <p class="panel-copy">Switch between alerts, performance, and recent activity without leaving the dashboard.</p>
           </div>
 
-          <form class="stack-form" id="sale-form">
-            <label class="field">
-              <span>Product</span>
-              <select id="sale-product" required></select>
-            </label>
-
-            <label class="field">
-              <span>Quantity sold</span>
-              <input id="sale-quantity" type="number" min="0.01" step="0.01" placeholder="0" required>
-            </label>
-
-            <label class="field">
-              <span>Note</span>
-              <input id="sale-note" type="text" maxlength="80" placeholder="Optional note">
-            </label>
-
-            <p class="form-preview" id="sale-preview">Choose a product to preview the sale amount.</p>
-
-            <button class="button primary" type="submit">Record Sale</button>
-          </form>
-        </section>
-
-        <section class="panel form-panel" aria-labelledby="restock-form-title">
-          <div class="panel-head compact">
-            <div>
-              <p class="eyebrow">Stock Replenishment</p>
-              <h2 id="restock-form-title">Record a restock</h2>
-            </div>
-            <p class="panel-copy">Add incoming inventory after supplier delivery and preserve the record immediately.</p>
+          <div class="segmented-tabs" role="tablist" aria-label="Store insights">
+            <button class="segment-button is-active" type="button" role="tab" aria-selected="true" data-tab-group="store-insights" data-tab-target="insight-alerts">
+              Alerts
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-performance">
+              Performance
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-activity">
+              Activity
+            </button>
           </div>
 
-          <form class="stack-form" id="restock-form">
-            <label class="field">
-              <span>Product</span>
-              <select id="restock-product" required></select>
-            </label>
+          <div class="tab-panel is-active" id="insight-alerts" data-tab-panel="store-insights">
+            <p class="section-intro">Review the most urgent products requiring replenishment.</p>
+            <div class="list-stack scroll-list" id="reorder-board"></div>
+          </div>
 
-            <label class="field">
-              <span>Quantity added</span>
-              <input id="restock-quantity" type="number" min="0.01" step="0.01" placeholder="0" required>
-            </label>
+          <div class="tab-panel" id="insight-performance" data-tab-panel="store-insights" hidden>
+            <p class="section-intro">Review sales movement and inventory value distribution by category.</p>
+            <div class="insight-split">
+              <div class="insight-section">
+                <h3>Top selling products</h3>
+                <div class="list-stack" id="hot-sellers"></div>
+              </div>
 
-            <label class="field">
-              <span>Note</span>
-              <input id="restock-note" type="text" maxlength="80" placeholder="Optional note">
-            </label>
+              <div class="insight-section">
+                <h3>Category value mix</h3>
+                <div class="bar-stack" id="category-mix"></div>
+              </div>
+            </div>
+          </div>
 
-            <p class="form-preview" id="restock-preview">Choose a product to preview the new stock level.</p>
-
-            <button class="button primary" type="submit">Record Restock</button>
-          </form>
+          <div class="tab-panel" id="insight-activity" data-tab-panel="store-insights" hidden>
+            <p class="section-intro">Review the latest inventory movements and product changes.</p>
+            <div class="activity-list scroll-list" id="recent-activity"></div>
+          </div>
         </section>
       </aside>
-    </section>
-
-    <section class="insights-grid">
-      <section class="panel insight-panel" aria-labelledby="reorder-board-title">
-        <div class="panel-head compact">
-          <div>
-            <p class="eyebrow">Inventory Alerts</p>
-            <h2 id="reorder-board-title">Reorder board</h2>
-          </div>
-          <p class="panel-copy">Review the most urgent products requiring replenishment.</p>
-        </div>
-
-        <div class="list-stack" id="reorder-board"></div>
-      </section>
-
-      <section class="panel insight-panel" aria-labelledby="seller-title">
-        <div class="panel-head compact">
-          <div>
-            <p class="eyebrow">Performance View</p>
-            <h2 id="seller-title">Top sellers and category value</h2>
-          </div>
-          <p class="panel-copy">Review sales movement and inventory value distribution by category.</p>
-        </div>
-
-        <div class="insight-section">
-          <h3>Top selling products</h3>
-          <div class="list-stack" id="hot-sellers"></div>
-        </div>
-
-        <div class="insight-section">
-          <h3>Category value mix</h3>
-          <div class="bar-stack" id="category-mix"></div>
-        </div>
-      </section>
-
-      <section class="panel insight-panel" aria-labelledby="activity-title">
-        <div class="panel-head compact">
-          <div>
-            <p class="eyebrow">Operational Activity</p>
-            <h2 id="activity-title">Recent activity</h2>
-          </div>
-          <p class="panel-copy">Review the latest inventory movements and product changes.</p>
-        </div>
-
-        <div class="activity-list" id="recent-activity"></div>
-      </section>
-    </section>
+    </div>
   </div>
 
   <div class="page-shell" id="admin-shell" hidden>
@@ -488,102 +495,113 @@
       </div>
     </header>
 
-    <section class="stats-grid" aria-label="Admin summary">
-      <article class="panel stat-card">
-        <p class="stat-label">Store Accounts</p>
-        <h2 class="stat-value" id="admin-total-users">0</h2>
-        <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
-      </article>
+    <div class="dashboard-grid admin-dashboard-grid">
+      <section class="dashboard-main">
+        <section class="stats-grid" aria-label="Admin summary">
+          <article class="panel stat-card">
+            <p class="stat-label">Store Accounts</p>
+            <h2 class="stat-value" id="admin-total-users">0</h2>
+            <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
+          </article>
 
-      <article class="panel stat-card">
-        <p class="stat-label">Tracked Products</p>
-        <h2 class="stat-value" id="admin-total-products">0</h2>
-        <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
-      </article>
+          <article class="panel stat-card">
+            <p class="stat-label">Tracked Products</p>
+            <h2 class="stat-value" id="admin-total-products">0</h2>
+            <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
+          </article>
 
-      <article class="panel stat-card">
-        <p class="stat-label">Combined Stock Value</p>
-        <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
-        <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
-      </article>
+          <article class="panel stat-card">
+            <p class="stat-label">Combined Stock Value</p>
+            <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
+            <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
+          </article>
 
-      <article class="panel stat-card">
-        <p class="stat-label">Stores Requiring Attention</p>
-        <h2 class="stat-value" id="admin-risk-stores">0</h2>
-        <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
-      </article>
-    </section>
+          <article class="panel stat-card">
+            <p class="stat-label">Stores Requiring Attention</p>
+            <h2 class="stat-value" id="admin-risk-stores">0</h2>
+            <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
+          </article>
+        </section>
 
-    <section class="panel inventory-panel" aria-labelledby="admin-users-title">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">User Registry</p>
-          <h2 id="admin-users-title">Store account directory</h2>
-        </div>
-        <p class="panel-copy">Review product count, stock value, low-stock exposure, and latest activity for each registered account.</p>
-      </div>
-
-      <div class="inventory-summary">
-        <p id="admin-summary-text">Showing 0 store accounts</p>
-        <p id="admin-summary-note">Local browser coverage only</p>
-      </div>
-
-      <div class="table-wrap">
-        <table class="inventory-table">
-          <thead>
-            <tr>
-              <th scope="col">Store</th>
-              <th scope="col">Owner</th>
-              <th scope="col">Products</th>
-              <th scope="col">Stock Value</th>
-              <th scope="col">Sales Today</th>
-              <th scope="col">Alerts</th>
-              <th scope="col">Last Login</th>
-              <th scope="col">Last Activity</th>
-            </tr>
-          </thead>
-          <tbody id="admin-users-body"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="insights-grid">
-      <section class="panel insight-panel" aria-labelledby="admin-attention-title">
-        <div class="panel-head compact">
-          <div>
-            <p class="eyebrow">Operational Risk</p>
-            <h2 id="admin-attention-title">Stores requiring attention</h2>
+        <section class="panel inventory-panel" aria-labelledby="admin-users-title">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">User Registry</p>
+              <h2 id="admin-users-title">Store account directory</h2>
+            </div>
+            <p class="panel-copy">Review product count, stock value, low-stock exposure, and latest activity for each registered account.</p>
           </div>
-          <p class="panel-copy">Accounts with low inventory coverage or out-of-stock items at present.</p>
-        </div>
 
-        <div class="list-stack" id="admin-attention-list"></div>
+          <div class="inventory-summary">
+            <p id="admin-summary-text">Showing 0 store accounts</p>
+            <p id="admin-summary-note">Local browser coverage only</p>
+          </div>
+
+          <div class="table-wrap">
+            <table class="inventory-table">
+              <thead>
+                <tr>
+                  <th scope="col">Store</th>
+                  <th scope="col">Owner</th>
+                  <th scope="col">Products</th>
+                  <th scope="col">Stock Value</th>
+                  <th scope="col">Sales Today</th>
+                  <th scope="col">Alerts</th>
+                  <th scope="col">Last Login</th>
+                  <th scope="col">Last Activity</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-body"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
-      <section class="panel insight-panel" aria-labelledby="admin-activity-title">
-        <div class="panel-head compact">
-          <div>
-            <p class="eyebrow">Operational Activity</p>
-            <h2 id="admin-activity-title">Recent account activity</h2>
+      <aside class="dashboard-side admin-side-stack">
+        <section class="panel tabbed-panel" aria-labelledby="admin-monitoring-title">
+          <div class="panel-head compact">
+            <div>
+              <p class="eyebrow">Administrative Review</p>
+              <h2 id="admin-monitoring-title">Monitoring panels</h2>
+            </div>
+            <p class="panel-copy">Switch between risk alerts, account activity, and sign-in monitoring from one compact panel.</p>
           </div>
-          <p class="panel-copy">Recent actions drawn from all registered store accounts on this browser.</p>
-        </div>
 
-        <div class="activity-list" id="admin-activity-list"></div>
-      </section>
-
-      <section class="panel insight-panel" aria-labelledby="admin-owner-title">
-        <div class="panel-head compact">
-          <div>
-            <p class="eyebrow">Account Oversight</p>
-            <h2 id="admin-owner-title">Recent sign-in activity</h2>
+          <div class="segmented-tabs" role="tablist" aria-label="Admin monitoring panels">
+            <button class="segment-button is-active" type="button" role="tab" aria-selected="true" data-tab-group="admin-monitoring" data-tab-target="admin-attention-panel">
+              Attention
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="admin-monitoring" data-tab-target="admin-activity-panel">
+              Activity
+            </button>
+            <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="admin-monitoring" data-tab-target="admin-owner-panel">
+              Sign-ins
+            </button>
           </div>
-          <p class="panel-copy">Review recently active store owners and the latest recorded sign-in times.</p>
-        </div>
 
-        <div class="list-stack" id="admin-owner-list"></div>
-      </section>
-    </section>
+          <div class="tab-panel is-active" id="admin-attention-panel" data-tab-panel="admin-monitoring">
+            <div class="section-intro">
+              Accounts with low inventory coverage or out-of-stock items at present.
+            </div>
+            <div class="list-stack scroll-list" id="admin-attention-list"></div>
+          </div>
+
+          <div class="tab-panel" id="admin-activity-panel" data-tab-panel="admin-monitoring" hidden>
+            <div class="section-intro">
+              Recent actions drawn from all registered store accounts on this browser.
+            </div>
+            <div class="activity-list scroll-list" id="admin-activity-list"></div>
+          </div>
+
+          <div class="tab-panel" id="admin-owner-panel" data-tab-panel="admin-monitoring" hidden>
+            <div class="section-intro">
+              Review recently active store owners and the latest recorded sign-in times.
+            </div>
+            <div class="list-stack scroll-list" id="admin-owner-list"></div>
+          </div>
+        </section>
+      </aside>
+    </div>
   </div>
 
   <script src="script.js"></script>
