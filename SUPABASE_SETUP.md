@@ -12,7 +12,11 @@ If you already ran the SQL once before and then add new features later:
 
 1. Open the SQL Editor again.
 2. Run the latest `supabase-setup.sql` file one more time.
-3. This safely adds any new tables or policies that were introduced, such as shared utang and expense tracking.
+3. This safely adds any new tables, columns, or policies that were introduced, such as:
+   - shared utang and expense tracking
+   - cost price and profit reporting fields
+   - product photo support
+   - receipt and customer-name fields for sales
 
 Example:
 

@@ -35,8 +35,10 @@ create table if not exists public.products (
   category text not null,
   unit text not null,
   price numeric(12, 2) not null default 0 check (price >= 0),
+  cost_price numeric(12, 2) not null default 0 check (cost_price >= 0),
   stock numeric(12, 2) not null default 0 check (stock >= 0),
   reorder_level numeric(12, 2) not null default 0 check (reorder_level >= 0),
+  image_url text not null default '',
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -50,7 +52,12 @@ create table if not exists public.transactions (
   quantity numeric(12, 2) not null,
   unit text not null,
   unit_price numeric(12, 2) not null,
+  unit_cost numeric(12, 2) not null default 0,
+  cost_total numeric(12, 2) not null default 0,
+  profit_amount numeric(12, 2) not null default 0,
   total numeric(12, 2) not null,
+  customer_name text not null default '',
+  receipt_number text not null default '',
   note text not null default '',
   occurred_at timestamptz not null default timezone('utc', now())
 );
@@ -84,9 +91,108 @@ create table if not exists public.activity (
   occurred_at timestamptz not null default timezone('utc', now())
 );
 
+alter table public.products
+  add column if not exists cost_price numeric(12, 2);
+
+alter table public.products
+  add column if not exists image_url text;
+
+update public.products
+set
+  cost_price = coalesce(cost_price, price),
+  image_url = coalesce(image_url, '')
+where cost_price is null
+   or image_url is null;
+
+alter table public.products
+  alter column cost_price set default 0;
+
+alter table public.products
+  alter column cost_price set not null;
+
+alter table public.products
+  alter column image_url set default '';
+
+alter table public.products
+  alter column image_url set not null;
+
+alter table public.transactions
+  add column if not exists unit_cost numeric(12, 2);
+
+alter table public.transactions
+  add column if not exists cost_total numeric(12, 2);
+
+alter table public.transactions
+  add column if not exists profit_amount numeric(12, 2);
+
+alter table public.transactions
+  add column if not exists customer_name text;
+
+alter table public.transactions
+  add column if not exists receipt_number text;
+
+update public.transactions
+set
+  unit_cost = coalesce(unit_cost, unit_price),
+  cost_total = coalesce(cost_total, quantity * coalesce(unit_cost, unit_price)),
+  profit_amount = coalesce(
+    profit_amount,
+    case
+      when type = 'sale' then total - (quantity * coalesce(unit_cost, unit_price))
+      else 0
+    end
+  ),
+  customer_name = coalesce(customer_name, ''),
+  receipt_number = coalesce(
+    receipt_number,
+    case
+      when type = 'sale' then 'REC-' || upper(left(replace(id, 'txn-', ''), 12))
+      else ''
+    end
+  )
+where unit_cost is null
+   or cost_total is null
+   or profit_amount is null
+   or customer_name is null
+   or receipt_number is null;
+
+alter table public.transactions
+  alter column unit_cost set default 0;
+
+alter table public.transactions
+  alter column unit_cost set not null;
+
+alter table public.transactions
+  alter column cost_total set default 0;
+
+alter table public.transactions
+  alter column cost_total set not null;
+
+alter table public.transactions
+  alter column profit_amount set default 0;
+
+alter table public.transactions
+  alter column profit_amount set not null;
+
+alter table public.transactions
+  alter column customer_name set default '';
+
+alter table public.transactions
+  alter column customer_name set not null;
+
+alter table public.transactions
+  alter column receipt_number set default '';
+
+alter table public.transactions
+  alter column receipt_number set not null;
+
 create unique index if not exists products_user_id_sku_unique
   on public.products (user_id, sku)
   where sku <> '';
+
+create unique index if not exists transactions_user_id_receipt_number_unique
+  on public.transactions (user_id, receipt_number)
+  where receipt_number <> '';
 
 create index if not exists products_user_id_idx on public.products (user_id);
 create index if not exists transactions_user_id_idx on public.transactions (user_id);
