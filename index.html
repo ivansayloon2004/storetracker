@@ -409,11 +409,6 @@
                   <span>Current stock</span>
                   <input id="product-stock" type="number" min="0" step="0.01" placeholder="0" required>
                 </label>
-
-                <label class="field">
-                  <span>Product photo URL</span>
-                  <input id="product-image-url" type="url" maxlength="500" placeholder="https://example.com/photo.jpg">
-                </label>
               </div>
 
               <div class="form-grid">
@@ -426,14 +421,6 @@
                   <span>Barcode or product code</span>
                   <input id="product-sku" type="text" maxlength="40" placeholder="Scan or type the barcode">
                 </label>
-              </div>
-
-              <div class="product-photo-preview-card">
-                <div class="product-photo-thumb large" id="product-photo-preview-thumb" aria-hidden="true">No photo</div>
-                <div class="product-photo-copy">
-                  <strong>Catalog preview</strong>
-                  <p id="product-photo-preview-note">Add a photo URL to show a product image on the inventory board and receipts.</p>
-                </div>
               </div>
 
               <div class="form-actions">
@@ -573,18 +560,21 @@
           </div>
 
           <div class="tab-panel" id="ops-scan" data-tab-panel="store-ops" hidden>
-            <h3 class="tab-section-title">Scan inventory action</h3>
+            <h3 class="tab-section-title">Scan to sell or restock</h3>
             <p class="section-intro">Use your phone camera or a barcode scanner to record a sale or restock for every recognized product code.</p>
 
-            <div class="form-grid">
-              <label class="field">
-                <span>Scan mode</span>
-                <select id="scanner-action">
-                  <option value="sale">Sell from barcode</option>
-                  <option value="restock">Restock from barcode</option>
-                </select>
-              </label>
+            <div class="segmented-tabs" role="tablist" aria-label="Barcode scanner action">
+              <button class="segment-button is-active" type="button" role="tab" aria-selected="true" data-scanner-mode="sale">
+                Scan to Sell
+              </button>
+              <button class="segment-button" type="button" role="tab" aria-selected="false" data-scanner-mode="restock">
+                Scan to Restock
+              </button>
+            </div>
 
+            <input id="scanner-action" type="hidden" value="sale">
+
+            <div class="form-grid">
               <label class="field">
                 <span>Quantity per scan</span>
                 <input id="scanner-quantity" type="number" min="0.01" step="0.01" value="1">
@@ -604,7 +594,7 @@
             </div>
 
             <p class="form-preview" id="scanner-status">
-              Save each product's barcode in the Barcode or product code field, then scan to record the selected inventory action automatically.
+              Choose Scan to Sell or Scan to Restock, then save each product barcode in the product code field before scanning.
             </p>
 
             <form class="scan-manual-form" id="scanner-manual-form">

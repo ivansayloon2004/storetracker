@@ -135,9 +135,6 @@ const elements = {
   productStock: document.querySelector("#product-stock"),
   productReorder: document.querySelector("#product-reorder"),
   productSku: document.querySelector("#product-sku"),
-  productImageUrl: document.querySelector("#product-image-url"),
-  productPhotoPreviewThumb: document.querySelector("#product-photo-preview-thumb"),
-  productPhotoPreviewNote: document.querySelector("#product-photo-preview-note"),
   productSubmit: document.querySelector("#product-submit"),
   productClear: document.querySelector("#product-clear"),
   productScanMode: document.querySelector("#product-scan-mode"),
@@ -156,6 +153,7 @@ const elements = {
   scannerStop: document.querySelector("#scanner-stop"),
   scannerStatus: document.querySelector("#scanner-status"),
   scannerAction: document.querySelector("#scanner-action"),
+  scannerModeButtons: document.querySelectorAll("[data-scanner-mode]"),
   scannerQuantity: document.querySelector("#scanner-quantity"),
   scannerManualForm: document.querySelector("#scanner-manual-form"),
   scannerCodeInput: document.querySelector("#scanner-code-input"),
@@ -352,7 +350,6 @@ function setupEventListeners() {
 
   elements.productForm.addEventListener("submit", handleProductSubmit);
   elements.productClear.addEventListener("click", resetProductForm);
-  elements.productImageUrl.addEventListener("input", renderProductPhotoPreview);
   elements.productScanMode.addEventListener("change", updateProductScanGuidance);
   elements.productScanQuantity.addEventListener("input", updateProductScanGuidance);
   elements.productScannerStart.addEventListener("click", () => {
@@ -368,7 +365,11 @@ function setupEventListeners() {
   elements.scannerStop.addEventListener("click", () => {
     stopCameraScanner();
   });
-  elements.scannerAction.addEventListener("change", updateScannerGuidance);
+  elements.scannerModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setScannerMode(button.dataset.scannerMode);
+    });
+  });
   elements.scannerQuantity.addEventListener("input", updateScannerGuidance);
   elements.scannerManualForm.addEventListener("submit", handleScannerManualSubmit);
   elements.saleForm.addEventListener("submit", handleSaleSubmit);
@@ -2141,7 +2142,6 @@ function renderAll() {
   renderRecoveryBanner();
   elements.todayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
   populateDebtCustomerSuggestions();
-  renderProductPhotoPreview();
   renderStats();
   populateCategoryFilter();
   populateProductSelectors();
@@ -3187,21 +3187,6 @@ function renderReportInsights() {
   });
 }
 
-function renderProductPhotoPreview() {
-  const imageUrl = sanitizeImageUrl(elements.productImageUrl.value);
-  if (!imageUrl) {
-    elements.productPhotoPreviewThumb.className = "product-photo-thumb large";
-    elements.productPhotoPreviewThumb.innerHTML = "No photo";
-    elements.productPhotoPreviewNote.textContent =
-      "Add a photo URL to show a product image on the inventory board and receipts.";
-    return;
-  }
-
-  elements.productPhotoPreviewThumb.className = "product-photo-thumb large has-image";
-  elements.productPhotoPreviewThumb.innerHTML = `<img src="${escapeHtml(imageUrl)}" alt="Product preview">`;
-  elements.productPhotoPreviewNote.textContent = "Product photo is ready for the catalog, receipts, and analytics panels.";
-}
-
 function renderProfitLeaders() {
   const profitLeaders = [...getProductPerformanceSummaries()]
     .sort((left, right) => right.profit - left.profit || right.revenue - left.revenue)
@@ -3480,6 +3465,7 @@ async function handleProductSubmit(event) {
   event.preventDefault();
 
   const productId = elements.productId.value.trim();
+  const existingProduct = productId ? getProductById(productId) : null;
   const product = {
     id: productId || uid("product"),
     name: elements.productName.value.trim(),
@@ -3490,7 +3476,7 @@ async function handleProductSubmit(event) {
     stock: roundNumber(elements.productStock.value),
     reorderLevel: roundNumber(elements.productReorder.value),
     sku: normalizeCode(elements.productSku.value),
-    imageUrl: sanitizeImageUrl(elements.productImageUrl.value),
+    imageUrl: sanitizeImageUrl(existingProduct?.imageUrl),
     updatedAt: new Date().toISOString(),
   };
 
@@ -3834,9 +3820,7 @@ function startEditingProduct(productId, options = {}) {
   elements.productStock.value = product.stock;
   elements.productReorder.value = product.reorderLevel;
   elements.productSku.value = product.sku;
-  elements.productImageUrl.value = product.imageUrl;
   elements.productScannerLastResult.textContent = `Editing ${product.name}. Scan a new barcode to update its code, or switch the product-tab scanner to restock mode to add more stock here.`;
-  renderProductPhotoPreview();
 
   if (options.scroll !== false) {
     elements.productForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3874,7 +3858,6 @@ function resetProductForm() {
   elements.productScanQuantity.value = "1";
   elements.productScannerCodeInput.value = "";
   elements.productScannerLastResult.textContent = "No product-tab barcode action has been recorded yet.";
-  renderProductPhotoPreview();
   updateProductScanGuidance();
 }
 
@@ -3983,6 +3966,11 @@ function getScannerSettings() {
   };
 }
 
+function setScannerMode(mode) {
+  elements.scannerAction.value = mode === "restock" ? "restock" : "sale";
+  updateScannerGuidance();
+}
+
 function getProductScanSettings() {
   return {
     mode: elements.productScanMode.value === "restock" ? "restock" : "fill",
@@ -3995,6 +3983,11 @@ function updateScannerGuidance() {
   const isRestock = mode === "restock";
   const quantityLabel = formatQuantity(Math.max(quantity, 0));
   const context = getScannerContext("inventory");
+  elements.scannerModeButtons.forEach((button) => {
+    const isActive = button.dataset.scannerMode === mode;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
   context.status.textContent = isRestock
     ? `Every recognized barcode will restock ${quantityLabel} item(s). Save the product barcode first, then scan to add stock automatically.`
     : `Every recognized barcode will record ${quantityLabel} item(s) sold. Save the product barcode first, then scan to reduce stock automatically.`;
