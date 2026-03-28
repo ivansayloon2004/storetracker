@@ -772,32 +772,6 @@
       </div>
     </header>
 
-    <section class="stats-grid" aria-label="Admin summary">
-      <article class="panel stat-card admin-stat-card">
-        <p class="stat-label">Store Accounts</p>
-        <h2 class="stat-value" id="admin-total-users">0</h2>
-        <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
-      </article>
-
-      <article class="panel stat-card admin-stat-card">
-        <p class="stat-label">Tracked Products</p>
-        <h2 class="stat-value" id="admin-total-products">0</h2>
-        <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
-      </article>
-
-      <article class="panel stat-card admin-stat-card">
-        <p class="stat-label">Combined Stock Value</p>
-        <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
-        <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
-      </article>
-
-      <article class="panel stat-card admin-stat-card">
-        <p class="stat-label">Stores Requiring Attention</p>
-        <h2 class="stat-value" id="admin-risk-stores">0</h2>
-        <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
-      </article>
-    </section>
-
     <div class="dashboard-grid admin-dashboard-grid">
       <section class="dashboard-main">
         <section class="panel inventory-panel admin-directory-panel" aria-labelledby="admin-users-title">
@@ -879,6 +853,32 @@
         </section>
       </aside>
     </div>
+
+    <section class="stats-grid admin-stats-grid" aria-label="Admin summary">
+      <article class="panel stat-card admin-stat-card">
+        <p class="stat-label">Store Accounts</p>
+        <h2 class="stat-value" id="admin-total-users">0</h2>
+        <p class="stat-foot" id="admin-users-foot">0 registered local accounts</p>
+      </article>
+
+      <article class="panel stat-card admin-stat-card">
+        <p class="stat-label">Tracked Products</p>
+        <h2 class="stat-value" id="admin-total-products">0</h2>
+        <p class="stat-foot" id="admin-products-foot">0 products across all stores</p>
+      </article>
+
+      <article class="panel stat-card admin-stat-card">
+        <p class="stat-label">Combined Stock Value</p>
+        <h2 class="stat-value" id="admin-total-value">PHP 0.00</h2>
+        <p class="stat-foot" id="admin-value-foot">Visible on this browser only</p>
+      </article>
+
+      <article class="panel stat-card admin-stat-card">
+        <p class="stat-label">Stores Requiring Attention</p>
+        <h2 class="stat-value" id="admin-risk-stores">0</h2>
+        <p class="stat-foot" id="admin-risk-foot">No stores currently require attention</p>
+      </article>
+    </section>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
