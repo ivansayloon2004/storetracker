@@ -8,39 +8,45 @@
     name="description"
     content="Track sari-sari store products, store-owner logins, and administrative monitoring in one formal dashboard."
   >
-  <link rel="stylesheet" href="styles.css?v=20260328c">
+  <link rel="stylesheet" href="styles.css?v=20260329a">
 </head>
 <body>
   <section class="auth-shell" id="auth-shell">
     <div class="auth-layout">
       <section class="panel auth-story">
-        <p class="eyebrow">Inventory Management Suite</p>
-        <h1>Tindahan Tracker</h1>
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">TT</div>
+          <div class="brand-copy">
+            <p class="eyebrow">Sari-Sari Store Smart Tracker</p>
+            <h1>Tindahan Tracker</h1>
+            <p class="brand-subtitle">A trustworthy sales, inventory, and utang workspace built for real neighborhood stores.</p>
+          </div>
+        </div>
         <p class="hero-lead">
-          A structured inventory and oversight workspace for sari-sari store operations, with controlled access for store owners and administrators.
+          Run daily store operations from one professional dashboard with user accounts, shared cloud sync, smart sales analytics, profit tracking, and customer credit monitoring.
         </p>
 
         <div class="auth-feature-grid">
+          <article class="auth-feature-card">
+            <strong>Trusted daily operations</strong>
+            <p>Track inventory, sales, profit, and low-stock alerts in a clear workspace designed to feel dependable on first use.</p>
+          </article>
+
           <article class="auth-feature-card">
             <strong>Shared store sync</strong>
             <p>After Supabase configuration, the same store account can be used across phone and desktop with one shared inventory.</p>
           </article>
 
           <article class="auth-feature-card">
-            <strong>Administrative oversight</strong>
-            <p>Review account activity, monitor stock exposure, and evaluate operational status from a dedicated administrative dashboard.</p>
-          </article>
-
-          <article class="auth-feature-card">
-            <strong>Controlled backup exports</strong>
-            <p>Store owners can export their own records, while administrators can review workspace activity in one place.</p>
+            <strong>Built for local store routines</strong>
+            <p>Use barcode tools, customer utang tracking, payment history, and printable receipts without juggling separate notebooks.</p>
           </article>
         </div>
 
         <div class="auth-note">
-          <span>Deployment Scope</span>
+          <span>Why Stores Use It</span>
           <p>
-            Shared phone-and-desktop login is enabled through Supabase for this deployment.
+            Shared phone-and-desktop login is enabled through Supabase for this deployment, so every store account keeps its own synchronized data.
           </p>
         </div>
       </section>
@@ -188,6 +194,17 @@
   </section>
 
   <div class="page-shell" id="app-shell" hidden>
+    <div class="brand-ribbon">
+      <div class="brand-ribbon-copy">
+        <div class="brand-mark small" aria-hidden="true">TT</div>
+        <div>
+          <p class="eyebrow">Trusted Store Operations</p>
+          <p class="brand-ribbon-title">Tindahan Tracker</p>
+        </div>
+      </div>
+      <p class="brand-ribbon-note">Smart inventory, sales, profit, and utang tracking for sari-sari stores.</p>
+    </div>
+
     <header class="hero panel">
       <div class="hero-copy">
         <p class="eyebrow">Operational Inventory Control</p>
@@ -228,25 +245,25 @@
 
     <section class="stats-grid" aria-label="Store summary">
       <article class="panel stat-card">
-        <p class="stat-label">Tracked Products</p>
+        <p class="stat-label">Inventory Count</p>
         <h2 class="stat-value" id="total-skus">0</h2>
         <p class="stat-foot" id="total-units-foot">0 units on hand</p>
       </article>
 
       <article class="panel stat-card">
-        <p class="stat-label">Retail Stock Value</p>
+        <p class="stat-label">Stock Value</p>
         <h2 class="stat-value" id="inventory-value">PHP 0.00</h2>
         <p class="stat-foot" id="stock-value-foot">Based on your selling price</p>
       </article>
 
       <article class="panel stat-card">
-        <p class="stat-label">Sales Today</p>
+        <p class="stat-label">Total Sales Today</p>
         <h2 class="stat-value" id="today-sales">PHP 0.00</h2>
         <p class="stat-foot" id="today-sales-foot">0 sales logged today</p>
       </article>
 
       <article class="panel stat-card">
-        <p class="stat-label">Low Stock Watch</p>
+        <p class="stat-label">Daily Profit</p>
         <h2 class="stat-value" id="low-stock-count">0</h2>
         <p class="stat-foot" id="low-stock-foot">No stock alerts at present</p>
       </article>
@@ -746,6 +763,7 @@
                 <strong id="reorder-priority-item">No alerts</strong>
               </article>
             </div>
+            <div class="list-stack compact-list" id="smart-insights-list"></div>
             <div class="list-stack scroll-list" id="reorder-board"></div>
           </div>
 
@@ -881,6 +899,13 @@
         </section>
       </aside>
     </div>
+
+    <nav class="quick-nav" aria-label="Quick store actions">
+      <button class="quick-nav-button" type="button" data-quick-group="store-ops" data-quick-target="ops-product">Add Item</button>
+      <button class="quick-nav-button" type="button" data-quick-group="store-ops" data-quick-target="ops-sale">Add Sale</button>
+      <button class="quick-nav-button" type="button" data-quick-group="store-insights" data-quick-target="insight-alerts">Alerts</button>
+      <button class="quick-nav-button" type="button" data-quick-group="store-insights" data-quick-target="insight-reports">Reports</button>
+    </nav>
   </div>
 
   <div class="page-shell" id="admin-shell" hidden>
@@ -1028,6 +1053,13 @@
     </section>
   </div>
 
+  <div class="busy-overlay" id="busy-overlay" hidden>
+    <div class="busy-card">
+      <div class="busy-spinner" aria-hidden="true"></div>
+      <p id="busy-label">Loading workspace...</p>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     window.TINDAHAN_SUPABASE_CONFIG = {
@@ -1036,6 +1068,6 @@
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqaGZ1ZGJpZ2l2ZGt5c3N5eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDAwMjYsImV4cCI6MjA5MDI3NjAyNn0.IVkYuKz903sm7UiE2x3VtJhiDE20pO1t_-AJfHIXteI",
     };
   </script>
-  <script src="script.js?v=20260328c"></script>
+  <script src="script.js?v=20260329a"></script>
 </body>
 </html>

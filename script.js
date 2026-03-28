@@ -67,6 +67,10 @@ const elements = {
   authShell: document.querySelector("#auth-shell"),
   appShell: document.querySelector("#app-shell"),
   adminShell: document.querySelector("#admin-shell"),
+  quickNav: document.querySelector(".quick-nav"),
+  quickNavButtons: document.querySelectorAll("[data-quick-group][data-quick-target]"),
+  busyOverlay: document.querySelector("#busy-overlay"),
+  busyLabel: document.querySelector("#busy-label"),
   authTabs: document.querySelector("#auth-tabs"),
   loginTab: document.querySelector("#login-tab"),
   signupTab: document.querySelector("#signup-tab"),
@@ -192,6 +196,7 @@ const elements = {
   reorderUrgentCount: document.querySelector("#reorder-urgent-count"),
   reorderSuggestedValue: document.querySelector("#reorder-suggested-value"),
   reorderPriorityItem: document.querySelector("#reorder-priority-item"),
+  smartInsightsList: document.querySelector("#smart-insights-list"),
   reorderBoard: document.querySelector("#reorder-board"),
   hotSellers: document.querySelector("#hot-sellers"),
   profitLeaders: document.querySelector("#profit-leaders"),
@@ -327,6 +332,14 @@ function setupEventListeners() {
     void handleAdminSubmit(event);
   });
 
+  elements.quickNavButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      activateTab(button.dataset.quickGroup, button.dataset.quickTarget);
+      const shellTarget = button.dataset.quickGroup === "store-ops" ? elements.appShell : elements.appShell;
+      shellTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+
   elements.searchInput.addEventListener("input", (event) => {
     filters.search = event.target.value.trim().toLowerCase();
     renderInventory();
@@ -433,28 +446,37 @@ function renderVisibility() {
 }
 
 async function syncInterface() {
+  setBusyState(true, "Loading workspace...");
   if (cloudMode) {
-    await syncCloudInterface();
+    try {
+      await syncCloudInterface();
+    } finally {
+      setBusyState(false);
+    }
     return;
   }
 
-  currentAdmin = resolveCurrentAdmin();
-  currentAccount = resolveCurrentAccount();
-  state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
-  renderAuthMode();
-  renderVisibility();
+  try {
+    currentAdmin = resolveCurrentAdmin();
+    currentAccount = resolveCurrentAccount();
+    state = currentAccount ? initializeStoreStateForAccount(currentAccount) : buildEmptyState();
+    renderAuthMode();
+    renderVisibility();
 
-  if (currentAdmin) {
-    stopCameraScanner({ silent: true });
-    resetAuthForms();
-    renderAdminDashboard();
-  } else if (currentAccount) {
-    resetAuthForms();
-    renderAll();
-  } else {
-    stopCameraScanner({ silent: true });
-    document.title = "Tindahan Tracker | Inventory Management Suite";
-    setAuthMessage(defaultAuthMessage());
+    if (currentAdmin) {
+      stopCameraScanner({ silent: true });
+      resetAuthForms();
+      renderAdminDashboard();
+    } else if (currentAccount) {
+      resetAuthForms();
+      renderAll();
+    } else {
+      stopCameraScanner({ silent: true });
+      document.title = "Tindahan Tracker | Inventory Management Suite";
+      setAuthMessage(defaultAuthMessage());
+    }
+  } finally {
+    setBusyState(false);
   }
 }
 
@@ -2122,6 +2144,8 @@ function renderStats() {
   );
   const todaySales = sum(todaySalesTransactions.map((transaction) => transaction.total));
   const todayGrossProfit = sum(todaySalesTransactions.map((transaction) => transaction.profitAmount ?? 0));
+  const todayExpenses = getFinancialSummary(isToday).expenses;
+  const todayNetProfit = roundMoney(todayGrossProfit - todayExpenses);
   const lowStockItems = state.products.filter((product) => {
     const status = getProductStatus(product).key;
     return status === "reorder" || status === "out";
@@ -2134,10 +2158,10 @@ function renderStats() {
   elements.todaySalesFoot.textContent = `${todaySalesTransactions.length} sale${
     todaySalesTransactions.length === 1 ? "" : "s"
   } logged today · Gross profit ${currencyFormatter.format(todayGrossProfit)}`;
-  elements.lowStockCount.textContent = numberFormatter.format(lowStockItems.length);
+  elements.lowStockCount.textContent = currencyFormatter.format(todayNetProfit);
   elements.lowStockFoot.textContent = lowStockItems.length
-    ? `${lowStockItems.filter((item) => getProductStatus(item).key === "out").length} item(s) are out of stock`
-    : "All products are within acceptable stock levels";
+    ? `${lowStockItems.length} low-stock alert${lowStockItems.length === 1 ? "" : "s"} need review`
+    : "No urgent low-stock alerts today";
 
   if (totalProducts) {
     const topCategory = getCategorySummaries()[0];
@@ -2442,6 +2466,7 @@ function renderInventory() {
 }
 
 function renderReorderBoard() {
+  renderSmartInsights();
   const lowStockProducts = [...state.products]
     .filter((product) => {
       const key = getProductStatus(product).key;
@@ -2496,6 +2521,34 @@ function renderReorderBoard() {
         </article>
       `;
     })
+    .join("");
+}
+
+function renderSmartInsights() {
+  const insights = getSmartInsights();
+  if (!insights.length) {
+    elements.smartInsightsList.innerHTML = `
+      <div class="empty-state">
+        Smart guidance will appear here after the tracker collects a bit more store activity.
+      </div>
+    `;
+    return;
+  }
+
+  elements.smartInsightsList.innerHTML = insights
+    .map(
+      (insight) => `
+        <article class="list-card insight-card">
+          <strong>${escapeHtml(insight.title)}</strong>
+          <div class="list-meta">
+            <span>${escapeHtml(insight.badge)}</span>
+          </div>
+          <div class="list-meta">
+            <span>${escapeHtml(insight.message)}</span>
+          </div>
+        </article>
+      `
+    )
     .join("");
 }
 
@@ -4061,8 +4114,10 @@ async function resetToDemoState() {
 }
 
 async function saveAndRefresh(message, tone) {
+  setBusyState(true, "Saving store updates...");
   const saved = await saveState();
   renderAll();
+  setBusyState(false);
   if (!saved) {
     setFeedback(
       cloudMode
@@ -4180,6 +4235,67 @@ function getProductPerformanceSummaries() {
     revenue: roundMoney(entry.revenue),
     profit: roundMoney(entry.profit),
   }));
+}
+
+function getSmartInsights() {
+  const insights = [];
+  const salesToday = getFinancialSummary(isToday);
+  const salesYesterday = getFinancialSummary((isoDate) => isWithinDayOffset(isoDate, 1));
+  const lowStockProducts = state.products.filter((product) => {
+    const status = getProductStatus(product).key;
+    return status === "reorder" || status === "out";
+  });
+  const staleProducts = state.products.filter((product) => {
+    const soldRecently = state.transactions.some((transaction) => {
+      return transaction.type === "sale" && transaction.productId === product.id && isWithinLastDays(transaction.occurredAt, 14);
+    });
+    return !soldRecently && product.stock > product.reorderLevel;
+  });
+  const topProfitProduct = [...getProductPerformanceSummaries()].sort(
+    (left, right) => right.profit - left.profit || right.quantity - left.quantity
+  )[0];
+
+  if (salesToday.sales > 0 || salesYesterday.sales > 0) {
+    const difference = roundMoney(salesToday.sales - salesYesterday.sales);
+    const direction = difference >= 0 ? "up" : "down";
+    const percentage = salesYesterday.sales > 0 ? Math.abs((difference / salesYesterday.sales) * 100) : 100;
+    insights.push({
+      title: "Sales pulse",
+      badge: `Today ${direction === "up" ? "up" : "down"} ${numberFormatter.format(percentage)}%`,
+      message: `You sold ${currencyFormatter.format(salesToday.sales)} today, ${direction === "up" ? "up" : "down"} ${currencyFormatter.format(
+        Math.abs(difference)
+      )} versus yesterday.`,
+    });
+  }
+
+  if (lowStockProducts.length) {
+    const priorityProduct = lowStockProducts[0];
+    insights.push({
+      title: "Restock priority",
+      badge: `${lowStockProducts.length} alert${lowStockProducts.length === 1 ? "" : "s"}`,
+      message: `${priorityProduct.name} should be reordered soon. Suggested refill: ${formatQuantity(
+        getSuggestedRestockQuantity(priorityProduct)
+      )} ${priorityProduct.unit}.`,
+    });
+  }
+
+  if (staleProducts.length) {
+    insights.push({
+      title: "Slow-moving stock",
+      badge: `${staleProducts.length} item${staleProducts.length === 1 ? "" : "s"} quiet`,
+      message: `${staleProducts[0].name} has stock on hand but no sale in the last 14 days. Consider promo pricing or reduced reorder plans.`,
+    });
+  }
+
+  if (topProfitProduct) {
+    insights.push({
+      title: "Top profit item",
+      badge: `${currencyFormatter.format(topProfitProduct.profit)} gross profit`,
+      message: `${topProfitProduct.name} leads current profit contribution with ${formatQuantity(topProfitProduct.quantity)} ${topProfitProduct.unit} sold.`,
+    });
+  }
+
+  return insights.slice(0, 4);
 }
 
 function getDailySalesTrend(days) {
@@ -4455,6 +4571,16 @@ function isThisMonth(isoDate) {
   return candidate.getFullYear() === today.getFullYear() && candidate.getMonth() === today.getMonth();
 }
 
+function isWithinDayOffset(isoDate, daysBack) {
+  const candidate = new Date(isoDate);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - daysBack);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return candidate >= start && candidate < end;
+}
+
 function isWithinLastDays(isoDate, days) {
   const candidate = new Date(isoDate);
   const now = new Date();
@@ -4527,6 +4653,16 @@ function setAdminFeedback(message, tone = "default") {
   }, 4200);
 }
 
+function setBusyState(isBusy, message = "Loading workspace...") {
+  if (!elements.busyOverlay || !elements.busyLabel) {
+    return;
+  }
+
+  elements.busyLabel.textContent = message;
+  elements.busyOverlay.hidden = !isBusy;
+  document.body.classList.toggle("is-busy", isBusy);
+}
+
 async function hashPassword(password, salt) {
   const input = `${salt}::${password}`;
 
@@ -4589,6 +4725,49 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function sanitizeImageUrl(value) {
+  const candidate = `${value || ""}`.trim();
+  if (!candidate) {
+    return "";
+  }
+
+  if (/^(https?:\/\/|data:image\/)/i.test(candidate)) {
+    return candidate;
+  }
+
+  return "";
+}
+
+function resolveCostPrice(value, fallbackPrice = 0) {
+  const numeric = roundMoney(value);
+  if (numeric > 0) {
+    return numeric;
+  }
+
+  const fallback = roundMoney(fallbackPrice);
+  return fallback > 0 ? roundMoney(fallback * 0.7) : 0;
+}
+
+function buildReceiptNumber(isoDate = new Date().toISOString()) {
+  const stamp = new Date(isoDate);
+  const yyyy = stamp.getFullYear();
+  const mm = String(stamp.getMonth() + 1).padStart(2, "0");
+  const dd = String(stamp.getDate()).padStart(2, "0");
+  const hh = String(stamp.getHours()).padStart(2, "0");
+  const min = String(stamp.getMinutes()).padStart(2, "0");
+  const ss = String(stamp.getSeconds()).padStart(2, "0");
+  return `RCPT-${yyyy}${mm}${dd}-${hh}${min}${ss}`;
+}
+
+function getProductInitials(name) {
+  const words = `${name || "Product"}`
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return words.map((word) => word[0]).join("").toUpperCase() || "PR";
 }
 
 function uid(prefix) {
