@@ -2934,9 +2934,11 @@ function renderStats() {
   const totalProducts = state.products.length;
   const totalUnits = sum(state.products.map((product) => product.stock));
   const retailValue = sum(state.products.map((product) => product.stock * product.price));
+  const allSalesTransactions = state.transactions.filter((transaction) => transaction.type === "sale");
   const todaySalesTransactions = state.transactions.filter(
     (transaction) => transaction.type === "sale" && isToday(transaction.occurredAt)
   );
+  const totalSalesOverall = sum(allSalesTransactions.map((transaction) => transaction.total));
   const todaySales = sum(todaySalesTransactions.map((transaction) => transaction.total));
   const todayGrossProfit = sum(todaySalesTransactions.map((transaction) => transaction.profitAmount ?? 0));
   const todayExpenses = getFinancialSummary(isToday).expenses;
@@ -2949,10 +2951,12 @@ function renderStats() {
   elements.totalSkus.textContent = numberFormatter.format(totalProducts);
   elements.totalUnitsFoot.textContent = `${formatQuantity(totalUnits)} total units on hand`;
   elements.inventoryValue.textContent = currencyFormatter.format(retailValue);
-  elements.todaySales.textContent = currencyFormatter.format(todaySales);
-  elements.todaySalesFoot.textContent = `${todaySalesTransactions.length} sale${
-    todaySalesTransactions.length === 1 ? "" : "s"
-  } logged today · Gross profit ${currencyFormatter.format(todayGrossProfit)}`;
+  elements.todaySales.textContent = currencyFormatter.format(totalSalesOverall);
+  elements.todaySalesFoot.textContent = allSalesTransactions.length
+    ? `${allSalesTransactions.length} sale${allSalesTransactions.length === 1 ? "" : "s"} recorded overall · Today ${currencyFormatter.format(
+        todaySales
+      )}`
+    : "No sales recorded yet";
   elements.lowStockCount.textContent = currencyFormatter.format(todayNetProfit);
   elements.lowStockFoot.textContent = lowStockItems.length
     ? `${lowStockItems.length} low-stock alert${lowStockItems.length === 1 ? "" : "s"} need review`
