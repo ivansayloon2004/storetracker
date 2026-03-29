@@ -14,10 +14,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Tindahan Tracker">
-  <link rel="manifest" href="manifest.webmanifest?v=20260329m">
+  <link rel="manifest" href="manifest.webmanifest?v=20260329n">
   <link rel="icon" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="styles.css?v=20260329m">
+  <link rel="stylesheet" href="styles.css?v=20260329n">
 </head>
 <body>
   <section class="auth-shell" id="auth-shell">
@@ -838,6 +838,26 @@
             </div>
             <div class="list-stack compact-list" id="smart-insights-list"></div>
             <div class="list-stack scroll-list" id="reorder-board"></div>
+
+            <div class="feature-panel-section">
+              <h3>Smart reorder forecast</h3>
+              <p class="section-intro">Estimate which items may run out soon based on recent sales, not only the fixed reorder level.</p>
+              <div class="summary-chip-grid compact-summary-grid">
+                <article class="summary-chip">
+                  <span>Forecast at risk</span>
+                  <strong id="forecast-risk-count">0</strong>
+                </article>
+                <article class="summary-chip">
+                  <span>Forecast reorder value</span>
+                  <strong id="forecast-restock-value">PHP 0.00</strong>
+                </article>
+                <article class="summary-chip">
+                  <span>Fastest runout</span>
+                  <strong id="forecast-priority-item">No forecast yet</strong>
+                </article>
+              </div>
+              <div class="list-stack" id="forecast-board"></div>
+            </div>
           </div>
 
           <div class="tab-panel" id="insight-performance" data-tab-panel="store-insights" hidden>
@@ -864,6 +884,26 @@
                 <h3>Weekly sales trend</h3>
                 <div class="bar-stack" id="weekly-sales-trend"></div>
               </div>
+            </div>
+
+            <div class="feature-panel-section">
+              <h3>Dead stock warning</h3>
+              <p class="section-intro">Highlight items with stock still on hand but no sale in the last 30 days so you can react before capital stays stuck.</p>
+              <div class="summary-chip-grid compact-summary-grid">
+                <article class="summary-chip">
+                  <span>Dead stock items</span>
+                  <strong id="dead-stock-count">0</strong>
+                </article>
+                <article class="summary-chip">
+                  <span>Capital locked</span>
+                  <strong id="dead-stock-value">PHP 0.00</strong>
+                </article>
+                <article class="summary-chip">
+                  <span>Oldest quiet item</span>
+                  <strong id="dead-stock-oldest">No dead stock</strong>
+                </article>
+              </div>
+              <div class="list-stack" id="dead-stock-board"></div>
             </div>
           </div>
 
@@ -945,6 +985,58 @@
                   <span id="report-monthly-units">Units sold: 0</span>
                 </div>
               </article>
+            </div>
+
+            <div class="calendar-panel feature-panel-section">
+              <div class="calendar-head">
+                <div>
+                  <h3>Opening and closing report</h3>
+                  <p class="section-intro">Save today's opening cash and review projected closing cash, collections, expenses, and stock alerts in one daybook.</p>
+                </div>
+                <form class="daybook-opening-form" id="opening-cash-form">
+                  <label class="field">
+                    <span>Opening cash (PHP)</span>
+                    <input id="opening-cash-input" type="number" min="0" step="0.01" placeholder="0.00">
+                  </label>
+                  <button class="button soft" type="submit">Save Opening Cash</button>
+                </form>
+              </div>
+
+              <div class="report-grid daybook-grid">
+                <article class="report-card">
+                  <span class="report-label">Opening cash</span>
+                  <strong id="daybook-opening-cash">PHP 0.00</strong>
+                  <div class="report-meta">
+                    <span id="daybook-opening-note">Set an opening amount for today.</span>
+                  </div>
+                </article>
+
+                <article class="report-card">
+                  <span class="report-label">Cash collected</span>
+                  <strong id="daybook-cash-collected">PHP 0.00</strong>
+                  <div class="report-meta">
+                    <span id="daybook-cash-collected-note">Sales and debt payments collected today.</span>
+                  </div>
+                </article>
+
+                <article class="report-card">
+                  <span class="report-label">Projected closing cash</span>
+                  <strong id="daybook-closing-cash">PHP 0.00</strong>
+                  <div class="report-meta">
+                    <span id="daybook-closing-note">Opening cash plus collections minus expenses.</span>
+                  </div>
+                </article>
+
+                <article class="report-card">
+                  <span class="report-label">Stock alerts at close</span>
+                  <strong id="daybook-alert-count">0 alerts</strong>
+                  <div class="report-meta">
+                    <span id="daybook-alert-note">No low-stock items need attention yet.</span>
+                  </div>
+                </article>
+              </div>
+
+              <div class="list-stack" id="daybook-report-list"></div>
             </div>
 
             <div class="insight-split">
@@ -1180,6 +1272,6 @@
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqaGZ1ZGJpZ2l2ZGt5c3N5eWhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MDAwMjYsImV4cCI6MjA5MDI3NjAyNn0.IVkYuKz903sm7UiE2x3VtJhiDE20pO1t_-AJfHIXteI",
     };
   </script>
-  <script src="script.js?v=20260329m"></script>
+  <script src="script.js?v=20260329n"></script>
 </body>
 </html>

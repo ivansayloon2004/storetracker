@@ -1449,6 +1449,10 @@ button {
   margin-top: 0.9rem;
 }
 
+.daybook-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .summary-chip,
 .report-card {
   display: grid;
@@ -1537,6 +1541,18 @@ button {
   margin-top: 1rem;
 }
 
+.feature-panel-section {
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(29, 42, 34, 0.08);
+}
+
+.feature-panel-section .section-intro {
+  margin-bottom: 0;
+}
+
 .calendar-head {
   display: flex;
   justify-content: space-between;
@@ -1550,6 +1566,17 @@ button {
   align-items: center;
   gap: 0.55rem;
   flex-wrap: wrap;
+}
+
+.daybook-opening-form {
+  display: grid;
+  grid-template-columns: minmax(190px, 220px) auto;
+  gap: 0.75rem;
+  align-items: end;
+}
+
+.daybook-opening-form .button {
+  width: auto;
 }
 
 .calendar-actions strong {
@@ -1996,6 +2023,10 @@ body.is-busy {
   .brand-ribbon,
   .brand-ribbon-copy {
     align-items: start;
+  }
+
+  .daybook-opening-form {
+    grid-template-columns: 1fr;
   }
 
   .brand-ribbon {

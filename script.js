@@ -31,11 +31,19 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
   day: "numeric",
   year: "numeric",
 });
+const timeFormatter = new Intl.DateTimeFormat("en-PH", {
+  timeStyle: "short",
+});
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const CLOUD_SYNC_INTERVAL_MS = 8000;
 const CLOUD_HISTORY_LIMIT = 1000;
 const CALENDAR_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const APP_VERSION = "20260329m";
+const APP_VERSION = "20260329n";
+const REORDER_FORECAST_WINDOW_DAYS = 14;
+const REORDER_FORECAST_COVER_DAYS = 10;
+const REORDER_FORECAST_RISK_DAYS = 7;
+const DEAD_STOCK_WARNING_DAYS = 30;
+const OPENING_CASH_ACTIVITY_KIND = "opening-cash";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -255,10 +263,18 @@ const elements = {
   reorderPriorityItem: document.querySelector("#reorder-priority-item"),
   smartInsightsList: document.querySelector("#smart-insights-list"),
   reorderBoard: document.querySelector("#reorder-board"),
+  forecastRiskCount: document.querySelector("#forecast-risk-count"),
+  forecastRestockValue: document.querySelector("#forecast-restock-value"),
+  forecastPriorityItem: document.querySelector("#forecast-priority-item"),
+  forecastBoard: document.querySelector("#forecast-board"),
   hotSellers: document.querySelector("#hot-sellers"),
   profitLeaders: document.querySelector("#profit-leaders"),
   categoryMix: document.querySelector("#category-mix"),
   weeklySalesTrend: document.querySelector("#weekly-sales-trend"),
+  deadStockCount: document.querySelector("#dead-stock-count"),
+  deadStockValue: document.querySelector("#dead-stock-value"),
+  deadStockOldest: document.querySelector("#dead-stock-oldest"),
+  deadStockBoard: document.querySelector("#dead-stock-board"),
   financeTodayProfit: document.querySelector("#finance-today-profit"),
   financeTodaySales: document.querySelector("#finance-today-sales"),
   financeTodayExpenses: document.querySelector("#finance-today-expenses"),
@@ -284,6 +300,17 @@ const elements = {
   reportMonthlyUnits: document.querySelector("#report-monthly-units"),
   reportWeeklyTrend: document.querySelector("#report-weekly-trend"),
   reportMonthlyTrend: document.querySelector("#report-monthly-trend"),
+  openingCashForm: document.querySelector("#opening-cash-form"),
+  openingCashInput: document.querySelector("#opening-cash-input"),
+  daybookOpeningCash: document.querySelector("#daybook-opening-cash"),
+  daybookOpeningNote: document.querySelector("#daybook-opening-note"),
+  daybookCashCollected: document.querySelector("#daybook-cash-collected"),
+  daybookCashCollectedNote: document.querySelector("#daybook-cash-collected-note"),
+  daybookClosingCash: document.querySelector("#daybook-closing-cash"),
+  daybookClosingNote: document.querySelector("#daybook-closing-note"),
+  daybookAlertCount: document.querySelector("#daybook-alert-count"),
+  daybookAlertNote: document.querySelector("#daybook-alert-note"),
+  daybookReportList: document.querySelector("#daybook-report-list"),
   profitCalendarPrev: document.querySelector("#profit-calendar-prev"),
   profitCalendarNext: document.querySelector("#profit-calendar-next"),
   profitCalendarLabel: document.querySelector("#profit-calendar-label"),
@@ -544,6 +571,9 @@ function setupEventListeners() {
   });
   elements.profitCalendarNext?.addEventListener("click", () => {
     shiftProfitCalendarMonth(1);
+  });
+  elements.openingCashForm?.addEventListener("submit", (event) => {
+    void handleOpeningCashSubmit(event);
   });
 }
 
@@ -2646,15 +2676,18 @@ function renderAll() {
   populateProductSelectors();
   renderInventory();
   renderReorderBoard();
+  renderReorderForecast();
   renderHotSellers();
   renderProfitLeaders();
   renderCategoryMix();
   renderWeeklySalesTrend();
+  renderDeadStockBoard();
   renderDebtPanel();
   renderExpensePanel();
   renderPurchaseLog();
   renderFinanceInsights();
   renderReportInsights();
+  renderOpeningClosingReport();
   renderProfitCalendar();
   renderReceiptInsights();
   renderRecentActivity();
@@ -3032,6 +3065,16 @@ function buildCloudSavePlan(scope = "all") {
       transactions: false,
       debts: false,
       expenses: true,
+      activity: true,
+    };
+  }
+
+  if (scope === "activity") {
+    return {
+      products: false,
+      transactions: false,
+      debts: false,
+      expenses: false,
       activity: true,
     };
   }
@@ -3703,6 +3746,74 @@ function renderReorderBoard() {
     .join("");
 }
 
+function renderReorderForecast() {
+  if (
+    !elements.forecastRiskCount ||
+    !elements.forecastRestockValue ||
+    !elements.forecastPriorityItem ||
+    !elements.forecastBoard
+  ) {
+    return;
+  }
+
+  const forecasts = getReorderForecasts();
+  if (!forecasts.length) {
+    elements.forecastRiskCount.textContent = "0";
+    elements.forecastRestockValue.textContent = currencyFormatter.format(0);
+    elements.forecastPriorityItem.textContent = "No forecast yet";
+    elements.forecastBoard.innerHTML = `
+      <div class="empty-state">
+        Recent sales movement will populate smart reorder forecasts here.
+      </div>
+    `;
+    return;
+  }
+
+  const forecastValue = sum(forecasts.map((forecast) => forecast.reorderCost));
+  const priorityForecast = forecasts[0];
+  elements.forecastRiskCount.textContent = numberFormatter.format(forecasts.length);
+  elements.forecastRestockValue.textContent = currencyFormatter.format(forecastValue);
+  elements.forecastPriorityItem.textContent = priorityForecast.projectedDaysLeft === null
+    ? `${priorityForecast.product.name} | Reorder level`
+    : `${priorityForecast.product.name} | ${formatDaysLeft(priorityForecast.projectedDaysLeft)}`;
+
+  elements.forecastBoard.innerHTML = forecasts
+    .slice(0, 6)
+    .map((forecast) => {
+      const lastSaleLabel = forecast.lastSoldAt
+        ? `Last sale: ${monthDayFormatter.format(new Date(forecast.lastSoldAt))}`
+        : "No sale history yet";
+
+      return `
+        <article class="list-card">
+          <strong>${escapeHtml(forecast.product.name)}</strong>
+          <div class="list-meta">
+            <span>${escapeHtml(forecast.product.category)}</span>
+            <span>${
+              forecast.averageDailyUnits > 0
+                ? `${formatQuantity(forecast.averageDailyUnits)} ${escapeHtml(forecast.product.unit)}/day`
+                : "No recent sales trend"
+            }</span>
+            <span>${
+              forecast.projectedDaysLeft === null
+                ? escapeHtml(getProductStatus(forecast.product).label)
+                : `${formatDaysLeft(forecast.projectedDaysLeft)} left`
+            }</span>
+          </div>
+          <div class="list-meta">
+            <span>Suggested refill: ${formatQuantity(forecast.suggestedQuantity)} ${escapeHtml(forecast.product.unit)}</span>
+            <span>Forecast cost: ${currencyFormatter.format(forecast.reorderCost)}</span>
+          </div>
+          <div class="list-meta">
+            <span>${escapeHtml(lastSaleLabel)}</span>
+            <span>${forecast.usesDemandForecast ? `Based on ${REORDER_FORECAST_WINDOW_DAYS}-day sales` : "Based on reorder level"}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderSmartInsights() {
   const insights = getSmartInsights();
   if (!insights.length) {
@@ -4063,6 +4174,89 @@ function renderReportInsights() {
   });
 }
 
+function renderOpeningClosingReport() {
+  if (
+    !elements.openingCashInput ||
+    !elements.daybookOpeningCash ||
+    !elements.daybookOpeningNote ||
+    !elements.daybookCashCollected ||
+    !elements.daybookCashCollectedNote ||
+    !elements.daybookClosingCash ||
+    !elements.daybookClosingNote ||
+    !elements.daybookAlertCount ||
+    !elements.daybookAlertNote ||
+    !elements.daybookReportList
+  ) {
+    return;
+  }
+
+  const report = getDailyOperatingReport(new Date());
+  if (document.activeElement !== elements.openingCashInput) {
+    elements.openingCashInput.value = report.openingEntry ? report.openingCash.toFixed(2) : "";
+  }
+
+  elements.daybookOpeningCash.textContent = currencyFormatter.format(report.openingCash);
+  elements.daybookOpeningNote.textContent = report.openingEntry
+    ? `Saved ${timeFormatter.format(new Date(report.openingEntry.occurredAt))}.`
+    : "Set an opening amount for today.";
+  elements.daybookCashCollected.textContent = currencyFormatter.format(report.cashCollected);
+  elements.daybookCashCollectedNote.textContent = `Cash sales ${currencyFormatter.format(
+    report.cashSalesEstimate
+  )} | Payments ${currencyFormatter.format(report.debtPayments)}`;
+  elements.daybookClosingCash.textContent = currencyFormatter.format(report.projectedClosingCash);
+  elements.daybookClosingNote.textContent = report.openingEntry
+    ? `Expenses ${currencyFormatter.format(report.summary.expenses)} | Credit issued ${currencyFormatter.format(report.debtCharges)}`
+    : "Add opening cash to get the full closing-cash estimate.";
+  elements.daybookAlertCount.textContent = `${report.lowStockCount} alert${report.lowStockCount === 1 ? "" : "s"}`;
+  elements.daybookAlertNote.textContent = report.lowStockCount
+    ? `${report.outOfStockCount} out of stock | ${report.restockCount} restock${
+        report.restockCount === 1 ? "" : "s"
+      } today`
+    : `${report.restockCount} restock${report.restockCount === 1 ? "" : "s"} today | Store stock looks stable`;
+
+  elements.daybookReportList.innerHTML = [
+    {
+      title: "Collections today",
+      meta: [
+        `Sales recorded: ${currencyFormatter.format(report.summary.sales)}`,
+        `Cash sales estimate: ${currencyFormatter.format(report.cashSalesEstimate)}`,
+        `Utang payments received: ${currencyFormatter.format(report.debtPayments)}`,
+      ],
+    },
+    {
+      title: "Credit and expenses",
+      meta: [
+        `Utang issued today: ${currencyFormatter.format(report.debtCharges)}`,
+        `Expenses today: ${currencyFormatter.format(report.summary.expenses)}`,
+        `Today's P&L: ${formatSignedCurrency(report.summary.profit)}`,
+      ],
+    },
+    {
+      title: "Movement log",
+      meta: [
+        `Units sold: ${formatQuantity(report.summary.unitsSold)}`,
+        `Restocks today: ${report.restockCount} | Capital ${currencyFormatter.format(report.restockCapital)}`,
+        report.lastSaleAt
+          ? `First sale: ${timeFormatter.format(new Date(report.firstSaleAt))} | Last sale: ${timeFormatter.format(
+              new Date(report.lastSaleAt)
+            )}`
+          : "No sale recorded today yet",
+      ],
+    },
+  ]
+    .map(
+      (entry) => `
+        <article class="list-card">
+          <strong>${escapeHtml(entry.title)}</strong>
+          <div class="list-meta">
+            ${entry.meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function renderProfitCalendar() {
   if (
     !elements.profitCalendarLabel ||
@@ -4180,6 +4374,55 @@ function renderWeeklySalesTrend() {
     emptyMessage: "Weekly sales trend will appear here after you start logging sales.",
     valueLabel: "Sales",
   });
+}
+
+function renderDeadStockBoard() {
+  if (!elements.deadStockCount || !elements.deadStockValue || !elements.deadStockOldest || !elements.deadStockBoard) {
+    return;
+  }
+
+  const deadStock = getDeadStockProducts();
+  if (!deadStock.length) {
+    elements.deadStockCount.textContent = "0";
+    elements.deadStockValue.textContent = currencyFormatter.format(0);
+    elements.deadStockOldest.textContent = "No dead stock";
+    elements.deadStockBoard.innerHTML = `
+      <div class="empty-state">
+        Products with no sale in the last ${DEAD_STOCK_WARNING_DAYS} days will appear here.
+      </div>
+    `;
+    return;
+  }
+
+  const oldestQuiet = deadStock[0];
+  const capitalLocked = sum(deadStock.map((entry) => entry.capitalLocked));
+  elements.deadStockCount.textContent = numberFormatter.format(deadStock.length);
+  elements.deadStockValue.textContent = currencyFormatter.format(capitalLocked);
+  elements.deadStockOldest.textContent = `${oldestQuiet.product.name} | ${oldestQuiet.daysWithoutSale}d quiet`;
+
+  elements.deadStockBoard.innerHTML = deadStock
+    .slice(0, 6)
+    .map((entry) => {
+      const saleLabel = entry.lastSoldAt
+        ? `Last sale: ${monthDayFormatter.format(new Date(entry.lastSoldAt))}`
+        : "Never sold yet";
+
+      return `
+        <article class="list-card">
+          <strong>${escapeHtml(entry.product.name)}</strong>
+          <div class="list-meta">
+            <span>${entry.daysWithoutSale} day${entry.daysWithoutSale === 1 ? "" : "s"} without sale</span>
+            <span>${formatQuantity(entry.product.stock)} ${escapeHtml(entry.product.unit)} on hand</span>
+            <span>${escapeHtml(saleLabel)}</span>
+          </div>
+          <div class="list-meta">
+            <span>Capital locked: ${currencyFormatter.format(entry.capitalLocked)}</span>
+            <span>Retail value: ${currencyFormatter.format(entry.retailValue)}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
 }
 
 function renderReceiptInsights() {
@@ -4754,6 +4997,45 @@ async function handleExpenseSubmit(event) {
   renderAll();
   elements.expenseForm.reset();
   setFeedback(`${category} expense saved successfully.`, "success");
+}
+
+async function handleOpeningCashSubmit(event) {
+  event.preventDefault();
+
+  if (!elements.openingCashInput) {
+    return;
+  }
+
+  const rawAmount = `${elements.openingCashInput.value || ""}`.trim();
+  if (!rawAmount) {
+    setFeedback("Enter today's opening cash amount before saving.", "warning");
+    return;
+  }
+
+  const amount = roundMoney(rawAmount);
+  if (amount < 0) {
+    setFeedback("Opening cash cannot be negative.", "danger");
+    return;
+  }
+
+  const previousState = normalizeState(state);
+  setOpeningCashForDate(new Date(), amount);
+
+  const saved = await saveState({ scope: "activity", backupReason: "opening-cash" });
+  if (!saved) {
+    state = previousState;
+    renderAll();
+    setFeedback(
+      cloudMode
+        ? lastCloudSaveErrorMessage || "The opening cash could not be synchronized right now."
+        : "The opening cash could not be saved right now.",
+      "danger"
+    );
+    return;
+  }
+
+  renderAll();
+  setFeedback(`Today's opening cash was saved at ${currencyFormatter.format(amount)}.`, "success");
 }
 
 function handleInventoryActions(event) {
@@ -5485,8 +5767,31 @@ function addActivity(kind, message, product) {
     occurredAt: new Date().toISOString(),
   });
 
-  state.activity = state.activity.slice(0, 80);
+  state.activity = limitActivityEntries(state.activity);
   state.transactions = state.transactions.slice(0, 160);
+}
+
+function limitActivityEntries(entries) {
+  const sortedEntries = [...entries].sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+  const openingEntries = [];
+  const regularEntries = [];
+
+  sortedEntries.forEach((entry) => {
+    if (entry.kind === OPENING_CASH_ACTIVITY_KIND) {
+      if (openingEntries.length < 31) {
+        openingEntries.push(entry);
+      }
+      return;
+    }
+
+    if (regularEntries.length < 80) {
+      regularEntries.push(entry);
+    }
+  });
+
+  return [...openingEntries, ...regularEntries].sort(
+    (left, right) => new Date(right.occurredAt) - new Date(left.occurredAt)
+  );
 }
 
 function getFilteredProducts() {
@@ -5542,8 +5847,125 @@ function getProductMargin(product) {
   return roundMoney(roundMoney(product.price) - resolveCostPrice(product.costPrice, product.price));
 }
 
-function getSuggestedRestockQuantity(product) {
+function getBaseRestockQuantity(product) {
+  if (!product) {
+    return 0;
+  }
+
+  if (product.reorderLevel <= 0) {
+    return 0;
+  }
+
   return Math.max(roundNumber(product.reorderLevel * 2 - product.stock), product.reorderLevel);
+}
+
+function getRecentSalesVelocity(product, windowDays = REORDER_FORECAST_WINDOW_DAYS) {
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - (windowDays - 1));
+
+  const sales = state.transactions
+    .filter((transaction) => {
+      return (
+        transaction.type === "sale" &&
+        transaction.productId === product.id &&
+        new Date(transaction.occurredAt) >= cutoff
+      );
+    })
+    .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+
+  const totalQuantity = roundNumber(sum(sales.map((transaction) => transaction.quantity)));
+  const averageDailyUnits = roundNumber(totalQuantity / windowDays);
+
+  return {
+    totalQuantity,
+    averageDailyUnits,
+    saleCount: sales.length,
+    lastSoldAt: sales[0]?.occurredAt || "",
+  };
+}
+
+function getReorderForecast(product) {
+  const velocity = getRecentSalesVelocity(product);
+  const status = getProductStatus(product);
+  const baseRestock = getBaseRestockQuantity(product);
+  const forecastTarget = velocity.averageDailyUnits > 0
+    ? Math.max(roundNumber(velocity.averageDailyUnits * REORDER_FORECAST_COVER_DAYS), roundNumber(product.reorderLevel * 2))
+    : 0;
+  const forecastRestock = Math.max(roundNumber(forecastTarget - product.stock), 0);
+  const suggestedQuantity = velocity.averageDailyUnits > 0
+    ? Math.max(baseRestock, forecastRestock)
+    : baseRestock;
+  const projectedDaysLeft = velocity.averageDailyUnits > 0 ? roundNumber(product.stock / velocity.averageDailyUnits) : null;
+  const usesDemandForecast = velocity.averageDailyUnits > 0;
+  const shouldDisplay = status.key === "out" || status.key === "reorder" || (projectedDaysLeft !== null && projectedDaysLeft <= REORDER_FORECAST_RISK_DAYS);
+
+  let priorityScore = 4;
+  if (status.key === "out") {
+    priorityScore = 0;
+  } else if (projectedDaysLeft !== null && projectedDaysLeft <= 2) {
+    priorityScore = 1;
+  } else if (status.key === "reorder" || (projectedDaysLeft !== null && projectedDaysLeft <= 4)) {
+    priorityScore = 2;
+  } else if (status.key === "watch" || (projectedDaysLeft !== null && projectedDaysLeft <= REORDER_FORECAST_RISK_DAYS)) {
+    priorityScore = 3;
+  }
+
+  return {
+    product,
+    status,
+    totalSoldWindow: velocity.totalQuantity,
+    averageDailyUnits: velocity.averageDailyUnits,
+    lastSoldAt: velocity.lastSoldAt,
+    projectedDaysLeft,
+    usesDemandForecast,
+    shouldDisplay,
+    priorityScore,
+    suggestedQuantity: roundNumber(suggestedQuantity),
+    reorderCost: roundMoney(suggestedQuantity * resolveCostPrice(product.costPrice, product.price)),
+  };
+}
+
+function getReorderForecasts() {
+  return state.products
+    .map((product) => getReorderForecast(product))
+    .filter((forecast) => forecast.shouldDisplay && forecast.suggestedQuantity > 0)
+    .sort((left, right) => {
+      const dayDifference = (left.projectedDaysLeft ?? Number.POSITIVE_INFINITY) - (right.projectedDaysLeft ?? Number.POSITIVE_INFINITY);
+      return left.priorityScore - right.priorityScore || dayDifference || right.reorderCost - left.reorderCost;
+    });
+}
+
+function getSuggestedRestockQuantity(product) {
+  return getReorderForecast(product).suggestedQuantity;
+}
+
+function getDeadStockProducts(days = DEAD_STOCK_WARNING_DAYS) {
+  const latestSales = new Map();
+
+  getSaleTransactions().forEach((transaction) => {
+    if (!latestSales.has(transaction.productId)) {
+      latestSales.set(transaction.productId, transaction.occurredAt);
+    }
+  });
+
+  return state.products
+    .map((product) => {
+      const lastSoldAt = latestSales.get(product.id) || "";
+      const referenceDate = lastSoldAt || product.updatedAt;
+      const daysWithoutSale = getElapsedDayCount(referenceDate, new Date());
+      return {
+        product,
+        lastSoldAt,
+        daysWithoutSale,
+        capitalLocked: roundMoney(product.stock * resolveCostPrice(product.costPrice, product.price)),
+        retailValue: roundMoney(product.stock * product.price),
+      };
+    })
+    .filter((entry) => entry.product.stock > 0 && entry.daysWithoutSale >= days)
+    .sort((left, right) => {
+      return right.daysWithoutSale - left.daysWithoutSale || right.capitalLocked - left.capitalLocked;
+    });
 }
 
 function getSaleTransactions() {
@@ -5961,12 +6383,29 @@ function getDailyFinanceMap() {
   return summaryMap;
 }
 
+function startOfDayDate(value) {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
 function getLocalDateKey(value) {
   const date = value instanceof Date ? value : new Date(value);
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
   const day = `${date.getDate()}`.padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function isSameLocalDateValue(value, targetDate) {
+  return getLocalDateKey(value) === getLocalDateKey(targetDate);
+}
+
+function getElapsedDayCount(fromValue, toValue = new Date()) {
+  const fromDate = startOfDayDate(fromValue);
+  const endDate = startOfDayDate(toValue);
+  const difference = endDate.getTime() - fromDate.getTime();
+  return Math.max(Math.floor(difference / (24 * 60 * 60 * 1000)), 0);
 }
 
 function isSameCalendarDate(left, right) {
@@ -5984,6 +6423,107 @@ function startOfMonthDate(value) {
   return date;
 }
 
+function buildOpeningCashMessage(amount) {
+  return `Opening cash: ${currencyFormatter.format(amount)}`;
+}
+
+function parseOpeningCashAmount(activity) {
+  if (!activity || activity.kind !== OPENING_CASH_ACTIVITY_KIND) {
+    return null;
+  }
+
+  const match = `${activity.message || ""}`.match(/([\d,]+(?:\.\d{1,2})?)/);
+  return match ? roundMoney(match[1].replace(/,/g, "")) : null;
+}
+
+function getOpeningCashEntryForDate(date = new Date()) {
+  const dayKey = getLocalDateKey(date);
+  const match = [...state.activity]
+    .filter((activity) => activity.kind === OPENING_CASH_ACTIVITY_KIND && `${activity.productId || ""}` === dayKey)
+    .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt))[0];
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = parseOpeningCashAmount(match);
+  if (amount === null) {
+    return null;
+  }
+
+  return {
+    ...match,
+    amount,
+    dayKey,
+  };
+}
+
+function setOpeningCashForDate(date, amount) {
+  const dayKey = getLocalDateKey(date);
+  const occurredAt = new Date().toISOString();
+  const existingEntry = state.activity.find(
+    (activity) => activity.kind === OPENING_CASH_ACTIVITY_KIND && `${activity.productId || ""}` === dayKey
+  );
+
+  if (existingEntry) {
+    existingEntry.message = buildOpeningCashMessage(amount);
+    existingEntry.productId = dayKey;
+    existingEntry.productName = "Opening cash";
+    existingEntry.occurredAt = occurredAt;
+  } else {
+    state.activity.unshift({
+      id: uid("activity"),
+      kind: OPENING_CASH_ACTIVITY_KIND,
+      message: buildOpeningCashMessage(amount),
+      productId: dayKey,
+      productName: "Opening cash",
+      occurredAt,
+    });
+  }
+
+  state.activity = limitActivityEntries(state.activity);
+}
+
+function getDailyOperatingReport(date = new Date()) {
+  const dayFilter = (value) => isSameLocalDateValue(value, date);
+  const summary = getFinancialSummary(dayFilter);
+  const openingEntry = getOpeningCashEntryForDate(date);
+  const openingCash = openingEntry?.amount ?? 0;
+  const debtCharges = sum(
+    state.debts.filter((entry) => entry.type === "charge" && dayFilter(entry.occurredAt)).map((entry) => entry.amount)
+  );
+  const debtPayments = sum(
+    state.debts.filter((entry) => entry.type === "payment" && dayFilter(entry.occurredAt)).map((entry) => entry.amount)
+  );
+  const restocksToday = state.transactions.filter((transaction) => transaction.type === "restock" && dayFilter(transaction.occurredAt));
+  const salesToday = state.transactions
+    .filter((transaction) => transaction.type === "sale" && dayFilter(transaction.occurredAt))
+    .sort((left, right) => new Date(left.occurredAt) - new Date(right.occurredAt));
+  const lowStockProducts = state.products.filter((product) => {
+    const status = getProductStatus(product).key;
+    return status === "reorder" || status === "out";
+  });
+  const cashSalesEstimate = roundMoney(Math.max(summary.sales - debtCharges, 0));
+  const cashCollected = roundMoney(cashSalesEstimate + debtPayments);
+
+  return {
+    summary,
+    openingEntry,
+    openingCash,
+    debtCharges,
+    debtPayments,
+    cashSalesEstimate,
+    cashCollected,
+    projectedClosingCash: roundMoney(openingCash + cashCollected - summary.expenses),
+    restockCount: restocksToday.length,
+    restockCapital: sum(restocksToday.map((transaction) => transaction.costTotal)),
+    lowStockCount: lowStockProducts.length,
+    outOfStockCount: lowStockProducts.filter((product) => getProductStatus(product).key === "out").length,
+    firstSaleAt: salesToday[0]?.occurredAt || "",
+    lastSaleAt: salesToday[salesToday.length - 1]?.occurredAt || "",
+  };
+}
+
 function formatCalendarPnl(value) {
   const rounded = roundMoney(value);
   if (rounded === 0) {
@@ -5991,6 +6531,19 @@ function formatCalendarPnl(value) {
   }
 
   return `${rounded > 0 ? "+" : "-"}P${numberFormatter.format(Math.abs(rounded))}`;
+}
+
+function formatDaysLeft(value) {
+  if (value === null || !Number.isFinite(value)) {
+    return "No runout estimate";
+  }
+
+  if (value < 1) {
+    return "Less than 1 day";
+  }
+
+  const rounded = value < 10 ? roundNumber(value) : Math.round(value);
+  return `${numberFormatter.format(rounded)} day${rounded === 1 ? "" : "s"}`;
 }
 
 function isToday(isoDate) {
@@ -6037,6 +6590,7 @@ function formatActivityLabel(kind) {
     "product-created": "New item",
     "product-updated": "Product edit",
     "product-deleted": "Removed item",
+    "opening-cash": "Opening cash",
     import: "Backup import",
     reset: "Demo reload",
     snapshot: "Store setup",
