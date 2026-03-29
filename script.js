@@ -34,7 +34,7 @@ const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39"
 const CLOUD_SYNC_INTERVAL_MS = 8000;
 const CLOUD_HISTORY_LIMIT = 1000;
 const CALENDAR_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const APP_VERSION = "20260329l";
+const APP_VERSION = "20260329m";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
 const emailRedirectTo = new URL("/", window.location.href).toString();
@@ -515,7 +515,7 @@ function setupEventListeners() {
   elements.saleCustomerName.addEventListener("input", updateSalePreview);
   elements.restockProduct.addEventListener("change", updateRestockPreview);
   elements.restockQuantity.addEventListener("input", updateRestockPreview);
-  elements.restockSupplier.addEventListener("input", updateRestockPreview);
+  elements.restockSupplier?.addEventListener("input", updateRestockPreview);
   elements.inventoryBody.addEventListener("click", handleInventoryActions);
   elements.reorderBoard.addEventListener("click", handleReorderActions);
   elements.salePrintLatest.addEventListener("click", printLatestReceipt);
@@ -3690,6 +3690,15 @@ function renderExpensePanel() {
 }
 
 function renderPurchaseLog() {
+  if (
+    !elements.purchaseMonthTotal ||
+    !elements.purchaseSupplierCount ||
+    !elements.purchaseLastSupplier ||
+    !elements.purchaseLogList
+  ) {
+    return;
+  }
+
   const purchases = getRestockTransactions();
   const monthPurchases = purchases.filter((transaction) => isThisMonth(transaction.occurredAt));
   const monthSuppliers = [...new Set(monthPurchases.map((transaction) => transaction.supplierName).filter(Boolean))];
@@ -3834,6 +3843,16 @@ function renderReportInsights() {
 }
 
 function renderProfitCalendar() {
+  if (
+    !elements.profitCalendarLabel ||
+    !elements.calendarMonthProfit ||
+    !elements.calendarBestDay ||
+    !elements.calendarLossDays ||
+    !elements.profitCalendarGrid
+  ) {
+    return;
+  }
+
   const viewMonth = startOfMonthDate(profitCalendarCursor);
   const dailyFinanceMap = getDailyFinanceMap();
   const year = viewMonth.getFullYear();
@@ -4384,7 +4403,7 @@ async function handleRestockSubmit(event) {
 
   const product = getProductById(elements.restockProduct.value);
   const quantity = roundNumber(elements.restockQuantity.value);
-  const supplierName = normalizeSupplierName(elements.restockSupplier.value);
+  const supplierName = normalizeSupplierName(elements.restockSupplier?.value);
   const note = elements.restockNote.value.trim();
 
   if (!product) {
@@ -4640,7 +4659,7 @@ function updateSalePreview() {
 function updateRestockPreview() {
   const product = getProductById(elements.restockProduct.value);
   const quantity = roundNumber(elements.restockQuantity.value);
-  const supplierName = normalizeSupplierName(elements.restockSupplier.value);
+  const supplierName = normalizeSupplierName(elements.restockSupplier?.value);
 
   if (!product) {
     elements.restockPreview.textContent = "Choose a product to preview the new stock level.";
