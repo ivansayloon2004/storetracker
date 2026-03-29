@@ -801,6 +801,28 @@ button {
   color: var(--muted);
 }
 
+.stat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.stat-tone-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(23, 35, 52, 0.08);
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .stat-value {
   margin-top: 0.65rem;
   font-size: clamp(1.8rem, 3vw, 2.4rem);
@@ -810,6 +832,34 @@ button {
   margin-top: 0.45rem;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.stat-card[data-pnl-state="profit"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(235, 247, 242, 0.96));
+}
+
+.stat-card[data-pnl-state="profit"] .stat-value {
+  color: #216851;
+}
+
+.stat-card[data-pnl-state="profit"] .stat-tone-badge {
+  background: rgba(44, 140, 112, 0.14);
+  color: #216851;
+}
+
+.stat-card[data-pnl-state="loss"] {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(251, 239, 239, 0.96));
+}
+
+.stat-card[data-pnl-state="loss"] .stat-value {
+  color: var(--danger);
+}
+
+.stat-card[data-pnl-state="loss"] .stat-tone-badge {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .dashboard-grid {
@@ -1931,6 +1981,10 @@ body.is-busy {
 
   .store-stats-grid .stat-value {
     font-size: clamp(1.35rem, 6vw, 1.8rem);
+  }
+
+  .store-stats-grid .stat-head {
+    gap: 0.45rem;
   }
 
   .store-stats-grid .stat-foot {

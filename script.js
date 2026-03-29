@@ -139,8 +139,10 @@ const elements = {
   stockValueFoot: document.querySelector("#stock-value-foot"),
   todaySales: document.querySelector("#today-sales"),
   todaySalesFoot: document.querySelector("#today-sales-foot"),
-  lowStockCount: document.querySelector("#low-stock-count"),
-  lowStockFoot: document.querySelector("#low-stock-foot"),
+  dailyPnlCard: document.querySelector("#daily-pnl-card"),
+  dailyPnlBadge: document.querySelector("#daily-pnl-badge"),
+  dailyPnlValue: document.querySelector("#daily-pnl-value"),
+  dailyPnlFoot: document.querySelector("#daily-pnl-foot"),
   inventorySummaryText: document.querySelector("#inventory-summary-text"),
   inventoryValueNote: document.querySelector("#inventory-value-note"),
   searchInput: document.querySelector("#search-input"),
@@ -2941,15 +2943,13 @@ function renderStats() {
   const todaySalesTransactions = state.transactions.filter(
     (transaction) => transaction.type === "sale" && isToday(transaction.occurredAt)
   );
+  const todaySummary = getFinancialSummary(isToday);
   const totalSalesOverall = sum(allSalesTransactions.map((transaction) => transaction.total));
   const todaySales = sum(todaySalesTransactions.map((transaction) => transaction.total));
-  const todayGrossProfit = sum(todaySalesTransactions.map((transaction) => transaction.profitAmount ?? 0));
-  const todayExpenses = getFinancialSummary(isToday).expenses;
-  const todayNetProfit = roundMoney(todayGrossProfit - todayExpenses);
-  const lowStockItems = state.products.filter((product) => {
-    const status = getProductStatus(product).key;
-    return status === "reorder" || status === "out";
-  });
+  const todayGrossProfit = todaySummary.grossProfit;
+  const todayExpenses = todaySummary.expenses;
+  const todayNetProfit = todaySummary.profit;
+  const dailyPnlState = todayNetProfit > 0 ? "profit" : todayNetProfit < 0 ? "loss" : "flat";
 
   elements.totalSkus.textContent = numberFormatter.format(totalProducts);
   elements.totalUnitsFoot.textContent = `${formatQuantity(totalUnits)} total units on hand`;
@@ -2960,10 +2960,14 @@ function renderStats() {
         todaySales
       )}`
     : "No sales recorded yet";
-  elements.lowStockCount.textContent = currencyFormatter.format(todayNetProfit);
-  elements.lowStockFoot.textContent = lowStockItems.length
-    ? `${lowStockItems.length} low-stock alert${lowStockItems.length === 1 ? "" : "s"} need review`
-    : "No urgent low-stock alerts today";
+  elements.dailyPnlCard.dataset.pnlState = dailyPnlState;
+  elements.dailyPnlBadge.textContent =
+    dailyPnlState === "profit" ? "Net Profit" : dailyPnlState === "loss" ? "Net Loss" : "Break-even";
+  elements.dailyPnlValue.textContent = formatSignedCurrency(todayNetProfit);
+  elements.dailyPnlFoot.textContent =
+    todaySummary.saleCount || todayExpenses
+      ? `Gross profit today: ${currencyFormatter.format(todayGrossProfit)} | Expenses today: ${currencyFormatter.format(todayExpenses)}`
+      : "Record sales and expenses to track today's P&L.";
 
   if (totalProducts) {
     const topCategory = getCategorySummaries()[0];
@@ -5522,6 +5526,17 @@ function roundMoney(value) {
     return 0;
   }
   return Number(numeric.toFixed(2));
+}
+
+function formatSignedCurrency(value) {
+  const rounded = roundMoney(value);
+  if (rounded > 0) {
+    return `+${currencyFormatter.format(rounded)}`;
+  }
+  if (rounded < 0) {
+    return `-${currencyFormatter.format(Math.abs(rounded))}`;
+  }
+  return currencyFormatter.format(0);
 }
 
 function roundNumber(value) {
