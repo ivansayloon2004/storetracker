@@ -256,6 +256,14 @@
           <p id="store-owner-display">Owner details</p>
         </div>
 
+        <div class="account-card sync-card" id="sync-status-card" data-sync-state="local">
+          <div class="account-card-head">
+            <p class="eyebrow">Shared Sync</p>
+            <span class="session-status" id="sync-status-pill" data-sync-state="local">Browser Only</span>
+          </div>
+          <p id="sync-status-note">This account is saving only on this device.</p>
+        </div>
+
         <p class="feedback-message" id="feedback-message">The inventory workspace is ready.</p>
 
         <div class="install-panel compact" data-install-panel hidden>
@@ -576,15 +584,40 @@
                 <input id="restock-quantity" type="number" min="0.01" step="0.01" placeholder="0" required>
               </label>
 
-              <label class="field">
-                <span>Note</span>
-                <input id="restock-note" type="text" maxlength="80" placeholder="Optional note">
-              </label>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Supplier</span>
+                  <input id="restock-supplier" type="text" maxlength="80" placeholder="Ex. Metro Wholesale">
+                </label>
+
+                <label class="field">
+                  <span>Note</span>
+                  <input id="restock-note" type="text" maxlength="80" placeholder="Optional note">
+                </label>
+              </div>
 
               <p class="form-preview" id="restock-preview">Choose a product to preview the new stock level.</p>
 
               <button class="button primary" type="submit">Record Restock</button>
             </form>
+
+            <h3 class="tab-section-title">Supplier purchase log</h3>
+            <p class="section-intro">Review supplier deliveries, capital spent, and your latest purchase entries in one place.</p>
+            <div class="summary-chip-grid compact-summary-grid">
+              <article class="summary-chip">
+                <span>Capital this month</span>
+                <strong id="purchase-month-total">PHP 0.00</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Suppliers used</span>
+                <strong id="purchase-supplier-count">0 suppliers</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Latest supplier</span>
+                <strong id="purchase-last-supplier">No purchases yet</strong>
+              </article>
+            </div>
+            <div class="list-stack scroll-list" id="purchase-log-list"></div>
           </div>
 
           <div class="tab-panel" id="ops-scan" data-tab-panel="store-ops" hidden>
@@ -912,6 +945,37 @@
                 <h3>This month by day</h3>
                 <div class="bar-stack" id="report-monthly-trend"></div>
               </div>
+            </div>
+
+            <div class="calendar-panel">
+              <div class="calendar-head">
+                <div>
+                  <h3>Profit calendar</h3>
+                  <p class="section-intro">See which days ended in profit or loss across the month.</p>
+                </div>
+                <div class="calendar-actions">
+                  <button class="mini-button" id="profit-calendar-prev" type="button">Previous</button>
+                  <strong id="profit-calendar-label">This month</strong>
+                  <button class="mini-button" id="profit-calendar-next" type="button">Next</button>
+                </div>
+              </div>
+
+              <div class="summary-chip-grid compact-summary-grid">
+                <article class="summary-chip">
+                  <span>Month P&amp;L</span>
+                  <strong id="calendar-month-profit">PHP 0.00</strong>
+                </article>
+                <article class="summary-chip">
+                  <span>Best day</span>
+                  <strong id="calendar-best-day">No activity yet</strong>
+                </article>
+                <article class="summary-chip">
+                  <span>Losing days</span>
+                  <strong id="calendar-loss-days">0 days</strong>
+                </article>
+              </div>
+
+              <div class="profit-calendar" id="profit-calendar-grid"></div>
             </div>
           </div>
 

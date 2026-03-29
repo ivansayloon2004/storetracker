@@ -690,6 +690,40 @@ button {
   text-transform: uppercase;
 }
 
+.sync-card {
+  gap: 0.45rem;
+}
+
+.sync-card[data-sync-state="syncing"] {
+  border-color: rgba(32, 79, 134, 0.2);
+  background: rgba(236, 243, 251, 0.92);
+}
+
+.sync-card[data-sync-state="issue"] {
+  border-color: rgba(160, 67, 67, 0.2);
+  background: rgba(251, 240, 240, 0.94);
+}
+
+.session-status[data-sync-state="local"] {
+  background: rgba(23, 35, 52, 0.08);
+  color: var(--muted);
+}
+
+.session-status[data-sync-state="syncing"] {
+  background: rgba(32, 79, 134, 0.12);
+  color: var(--accent-deep);
+}
+
+.session-status[data-sync-state="synced"] {
+  background: rgba(43, 111, 99, 0.12);
+  color: #216851;
+}
+
+.session-status[data-sync-state="issue"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .account-card p:last-child {
   color: var(--muted);
   line-height: 1.5;
@@ -1484,6 +1518,107 @@ button {
   margin-bottom: 0.8rem;
 }
 
+.calendar-panel {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.calendar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.calendar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.calendar-actions strong {
+  font-size: 0.98rem;
+}
+
+.profit-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.calendar-weekday {
+  padding: 0.35rem 0.25rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calendar-cell {
+  display: grid;
+  gap: 0.24rem;
+  min-height: 5.5rem;
+  padding: 0.55rem 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(23, 35, 52, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.calendar-cell.quiet {
+  background: rgba(239, 243, 248, 0.72);
+}
+
+.calendar-cell.profit {
+  background: rgba(233, 247, 241, 0.96);
+  border-color: rgba(44, 140, 112, 0.18);
+}
+
+.calendar-cell.loss {
+  background: rgba(251, 239, 239, 0.96);
+  border-color: rgba(160, 67, 67, 0.18);
+}
+
+.calendar-cell.today {
+  box-shadow: inset 0 0 0 1px rgba(32, 79, 134, 0.35);
+}
+
+.calendar-cell.empty {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.calendar-date {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.calendar-profit {
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.calendar-cell.profit .calendar-profit {
+  color: #216851;
+}
+
+.calendar-cell.loss .calendar-profit {
+  color: var(--danger);
+}
+
+.calendar-meta {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+
 .insight-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 247, 251, 0.94));
 }
@@ -2026,6 +2161,38 @@ body.is-busy {
   .inventory-summary {
     display: grid;
     gap: 0.3rem;
+  }
+
+  .calendar-head,
+  .calendar-actions {
+    gap: 0.5rem;
+  }
+
+  .calendar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .profit-calendar {
+    gap: 0.3rem;
+  }
+
+  .calendar-weekday {
+    font-size: 0.68rem;
+    padding-inline: 0.1rem;
+  }
+
+  .calendar-cell {
+    min-height: 4.7rem;
+    padding: 0.4rem 0.35rem;
+  }
+
+  .calendar-profit {
+    font-size: 0.76rem;
+  }
+
+  .calendar-meta {
+    font-size: 0.66rem;
   }
 
   .store-dashboard-grid .segmented-tabs,

@@ -16,6 +16,14 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-PH", {
   dateStyle: "medium",
   timeStyle: "short",
 });
+const monthYearFormatter = new Intl.DateTimeFormat("en-PH", {
+  month: "long",
+  year: "numeric",
+});
+const monthDayFormatter = new Intl.DateTimeFormat("en-PH", {
+  month: "short",
+  day: "numeric",
+});
 const dayFormatter = new Intl.DateTimeFormat("en-PH", {
   weekday: "long",
   month: "long",
@@ -24,6 +32,8 @@ const dayFormatter = new Intl.DateTimeFormat("en-PH", {
 });
 const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "codabar"];
 const CLOUD_SYNC_INTERVAL_MS = 8000;
+const CLOUD_HISTORY_LIMIT = 1000;
+const CALENDAR_WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const APP_VERSION = "20260329k";
 const cloudConfig = window.TINDAHAN_SUPABASE_CONFIG || {};
 const cloudMode = Boolean(window.supabase?.createClient && cloudConfig.url && cloudConfig.anonKey);
@@ -59,6 +69,7 @@ const cloudColumnSupport = {
     profit_amount: true,
     customer_name: true,
     receipt_number: true,
+    supplier_name: true,
   },
 };
 const filters = {
@@ -84,6 +95,12 @@ let cloudSyncInFlight = false;
 let lastCloudSyncMarker = "";
 let lastCloudSaveErrorMessage = "";
 let deferredInstallPrompt = null;
+let profitCalendarCursor = startOfMonthDate(new Date());
+let activeStoreViewAccountId = "";
+const syncStatusState = {
+  mode: cloudMode ? "syncing" : "local",
+  note: "",
+};
 
 const elements = {
   authShell: document.querySelector("#auth-shell"),
@@ -128,6 +145,9 @@ const elements = {
   storeSubtitle: document.querySelector("#store-subtitle"),
   storeNameDisplay: document.querySelector("#store-name-display"),
   storeOwnerDisplay: document.querySelector("#store-owner-display"),
+  syncStatusCard: document.querySelector("#sync-status-card"),
+  syncStatusPill: document.querySelector("#sync-status-pill"),
+  syncStatusNote: document.querySelector("#sync-status-note"),
   logoutButton: document.querySelector("#logout-button"),
   feedbackMessage: document.querySelector("#feedback-message"),
   recoveryBanner: document.querySelector("#recovery-banner"),
@@ -197,8 +217,13 @@ const elements = {
   restockForm: document.querySelector("#restock-form"),
   restockProduct: document.querySelector("#restock-product"),
   restockQuantity: document.querySelector("#restock-quantity"),
+  restockSupplier: document.querySelector("#restock-supplier"),
   restockNote: document.querySelector("#restock-note"),
   restockPreview: document.querySelector("#restock-preview"),
+  purchaseMonthTotal: document.querySelector("#purchase-month-total"),
+  purchaseSupplierCount: document.querySelector("#purchase-supplier-count"),
+  purchaseLastSupplier: document.querySelector("#purchase-last-supplier"),
+  purchaseLogList: document.querySelector("#purchase-log-list"),
   debtForm: document.querySelector("#debt-form"),
   debtCustomerName: document.querySelector("#debt-customer-name"),
   debtCustomerOptions: document.querySelector("#debt-customer-options"),
@@ -253,6 +278,13 @@ const elements = {
   reportMonthlyUnits: document.querySelector("#report-monthly-units"),
   reportWeeklyTrend: document.querySelector("#report-weekly-trend"),
   reportMonthlyTrend: document.querySelector("#report-monthly-trend"),
+  profitCalendarPrev: document.querySelector("#profit-calendar-prev"),
+  profitCalendarNext: document.querySelector("#profit-calendar-next"),
+  profitCalendarLabel: document.querySelector("#profit-calendar-label"),
+  calendarMonthProfit: document.querySelector("#calendar-month-profit"),
+  calendarBestDay: document.querySelector("#calendar-best-day"),
+  calendarLossDays: document.querySelector("#calendar-loss-days"),
+  profitCalendarGrid: document.querySelector("#profit-calendar-grid"),
   salesHistoryTotal: document.querySelector("#sales-history-total"),
   salesHistoryCount: document.querySelector("#sales-history-count"),
   salesHistoryLatestDate: document.querySelector("#sales-history-latest-date"),
@@ -483,6 +515,7 @@ function setupEventListeners() {
   elements.saleCustomerName.addEventListener("input", updateSalePreview);
   elements.restockProduct.addEventListener("change", updateRestockPreview);
   elements.restockQuantity.addEventListener("input", updateRestockPreview);
+  elements.restockSupplier.addEventListener("input", updateRestockPreview);
   elements.inventoryBody.addEventListener("click", handleInventoryActions);
   elements.reorderBoard.addEventListener("click", handleReorderActions);
   elements.salePrintLatest.addEventListener("click", printLatestReceipt);
@@ -497,6 +530,12 @@ function setupEventListeners() {
   });
   elements.adminExportButton.addEventListener("click", exportAdminReport);
   elements.adminLogoutButton.addEventListener("click", logoutAdmin);
+  elements.profitCalendarPrev?.addEventListener("click", () => {
+    shiftProfitCalendarMonth(-1);
+  });
+  elements.profitCalendarNext?.addEventListener("click", () => {
+    shiftProfitCalendarMonth(1);
+  });
 }
 
 function isStandaloneApp() {
@@ -718,6 +757,7 @@ async function syncCloudInterface() {
     currentAdmin = null;
     adminRecord = null;
     lastCloudSyncMarker = "";
+    resetStoreViewState();
     accounts = [];
     remoteStoreMap = {};
     state = buildEmptyState();
@@ -734,11 +774,13 @@ async function syncCloudInterface() {
 async function syncCloudInterfaceForUser(user) {
   const profile = await ensureCloudProfile(user);
   if (!profile) {
+    setSyncStatus("issue", "Unable to load the shared cloud account profile right now.");
     session = null;
     currentAccount = null;
     currentAdmin = null;
     adminRecord = null;
     lastCloudSyncMarker = "";
+    resetStoreViewState();
     accounts = [];
     remoteStoreMap = {};
     state = buildEmptyState();
@@ -759,6 +801,7 @@ async function syncCloudInterfaceForUser(user) {
     currentAdmin = buildCloudAdmin(profile);
     adminRecord = currentAdmin;
     lastCloudSyncMarker = "";
+    resetStoreViewState();
     state = buildEmptyState();
     resetAuthForms();
     await loadCloudAdminWorkspace();
@@ -771,16 +814,19 @@ async function syncCloudInterfaceForUser(user) {
   adminRecord = null;
   currentAccount = buildCloudAccount(profile);
   lastCloudSyncMarker = getCloudSyncMarker(profile);
+  setSyncStatus("syncing", "Loading shared store data...");
   accounts = [];
   remoteStoreMap = {};
   state = await loadCloudStateForUser(currentAccount.id, currentAccount.storeName);
   if (!state) {
+    setSyncStatus("issue", "Shared data tables are not ready yet for this account.");
     state = buildEmptyState();
     renderVisibility();
     renderAll();
     setFeedback("Shared data tables are not ready yet. Run supabase-setup.sql in your Supabase project.", "danger");
     return;
   }
+  setSyncStatus("synced");
   remoteStoreMap[currentAccount.id] = normalizeState(state);
   resetAuthForms();
   renderVisibility();
@@ -888,6 +934,7 @@ async function refreshCloudAccountState(options = {}) {
   try {
     const profile = await loadCloudProfile(currentAccount.id);
     if (!profile) {
+      setSyncStatus("issue", "The shared workspace could not be reached for refresh.");
       return false;
     }
 
@@ -898,6 +945,7 @@ async function refreshCloudAccountState(options = {}) {
 
     const latestState = await loadCloudStateForUser(currentAccount.id, profile.store_name);
     if (!latestState) {
+      setSyncStatus("issue", "The shared workspace could not finish refreshing this account.");
       return false;
     }
 
@@ -905,6 +953,7 @@ async function refreshCloudAccountState(options = {}) {
     currentAccount = buildCloudAccount(profile);
     state = normalizeState(latestState);
     remoteStoreMap[currentAccount.id] = state;
+    setSyncStatus("synced");
     renderVisibility();
     renderAll();
     return true;
@@ -925,7 +974,7 @@ async function loadCloudStateForUser(userId, storeName) {
       .select("*")
       .eq("user_id", userId)
       .order("occurred_at", { ascending: false })
-      .limit(160),
+      .limit(CLOUD_HISTORY_LIMIT),
     supabaseClient
       .from("activity")
       .select("id, user_id, kind, message, product_id, product_name, occurred_at")
@@ -943,7 +992,7 @@ async function loadCloudStateForUser(userId, storeName) {
       .select("id, user_id, category, amount, note, occurred_at")
       .eq("user_id", userId)
       .order("occurred_at", { ascending: false })
-      .limit(180),
+      .limit(CLOUD_HISTORY_LIMIT),
   ]);
 
   if (productsResult.error || transactionsResult.error || activityResult.error) {
@@ -1113,6 +1162,7 @@ function mapDatabaseProduct(row) {
 }
 
 function mapDatabaseTransaction(row) {
+  const purchaseDetails = row.type === "restock" ? parseRestockMetadata(row.note, row.supplier_name) : null;
   return {
     id: row.id,
     type: row.type,
@@ -1130,7 +1180,8 @@ function mapDatabaseTransaction(row) {
     total: roundMoney(row.total),
     customerName: `${row.customer_name || ""}`.trim(),
     receiptNumber: `${row.receipt_number || ""}`.trim(),
-    note: `${row.note || ""}`.trim(),
+    supplierName: purchaseDetails?.supplierName || "",
+    note: purchaseDetails?.note ?? `${row.note || ""}`.trim(),
     occurredAt: normalizeDate(row.occurred_at),
   };
 }
@@ -1744,8 +1795,8 @@ function buildDefaultState() {
     buildTransaction("sale", products[3], 6, "Morning coffee rush", 135, { customerName: "Walk-in customer" }),
     buildTransaction("sale", products[6], 12, "Breakfast buyers", 75, { customerName: "Mang Jose" }),
     buildTransaction("sale", products[0], 4, "Lunch items", 55, { customerName: "Aling Rosa" }),
-    buildTransaction("restock", products[4], 20, "Weekly supplier refill", 26 * 60),
-    buildTransaction("restock", products[1], 24, "Added noodle packs", 14 * 60),
+    buildTransaction("restock", products[4], 20, "Weekly supplier refill", 26 * 60, { supplierName: "Metro Wholesale" }),
+    buildTransaction("restock", products[1], 24, "Added noodle packs", 14 * 60, { supplierName: "Lucky Eight Trading" }),
   ];
 
   const debts = [
@@ -1798,6 +1849,7 @@ function buildTransaction(type, product, quantity, note, minutesAgo, options = {
   const unitCost = resolveCostPrice(options.unitCost, product.costPrice ?? product.price);
   const total = roundMoney(quantity * product.price);
   const costTotal = roundMoney(quantity * unitCost);
+  const purchaseDetails = type === "restock" ? parseRestockMetadata(note, options.supplierName) : null;
   return {
     id: uid("txn"),
     type,
@@ -1812,7 +1864,8 @@ function buildTransaction(type, product, quantity, note, minutesAgo, options = {
     total,
     customerName: `${options.customerName || ""}`.trim(),
     receiptNumber: type === "sale" ? `${options.receiptNumber || buildReceiptNumber(minutesAgoToIso(minutesAgo || 0))}` : "",
-    note: `${note || ""}`.trim(),
+    supplierName: purchaseDetails?.supplierName || "",
+    note: purchaseDetails?.note ?? `${note || ""}`.trim(),
     occurredAt: minutesAgoToIso(minutesAgo),
   };
 }
@@ -1900,14 +1953,46 @@ function normalizeCode(value) {
     .toUpperCase();
 }
 
+function normalizeSupplierName(value) {
+  return `${value || ""}`.trim();
+}
+
+function parseRestockMetadata(note, supplierName = "") {
+  const rawNote = `${note || ""}`.trim();
+  const match = rawNote.match(/^supplier:\s*(.+?)(?:\s+\|\s+(.*))?$/i);
+  const parsedSupplier = match ? normalizeSupplierName(match[1]) : "";
+  const normalizedSupplier = normalizeSupplierName(supplierName || parsedSupplier);
+  return {
+    supplierName: normalizedSupplier,
+    note: match ? `${match[2] || ""}`.trim() : rawNote,
+  };
+}
+
+function serializeTransactionNote(transaction) {
+  const note = `${transaction?.note || ""}`.trim();
+  if (transaction?.type !== "restock") {
+    return note;
+  }
+
+  const supplierName = normalizeSupplierName(transaction.supplierName);
+  if (!supplierName) {
+    return note;
+  }
+
+  return note ? `Supplier: ${supplierName} | ${note}` : `Supplier: ${supplierName}`;
+}
+
 function normalizeTransaction(transaction) {
   if (!transaction || !transaction.productId || !transaction.type) {
     return null;
   }
 
+  const normalizedType = transaction.type === "restock" ? "restock" : "sale";
+  const purchaseDetails = normalizedType === "restock" ? parseRestockMetadata(transaction.note, transaction.supplierName) : null;
+
   return {
     id: `${transaction.id || uid("txn")}`,
-    type: transaction.type === "restock" ? "restock" : "sale",
+    type: normalizedType,
     productId: `${transaction.productId}`,
     productName: `${transaction.productName || "Unknown product"}`.trim(),
     quantity: roundNumber(transaction.quantity),
@@ -1928,7 +2013,8 @@ function normalizeTransaction(transaction) {
     total: roundMoney(transaction.total),
     customerName: `${transaction.customerName || ""}`.trim(),
     receiptNumber: `${transaction.receiptNumber || ""}`.trim(),
-    note: `${transaction.note || ""}`.trim(),
+    supplierName: purchaseDetails?.supplierName || "",
+    note: purchaseDetails?.note ?? `${transaction.note || ""}`.trim(),
     occurredAt: normalizeDate(transaction.occurredAt),
   };
 }
@@ -2343,6 +2429,7 @@ function logoutCurrentAccount() {
     currentAccount = null;
     currentAdmin = null;
     state = buildEmptyState();
+    resetStoreViewState();
     accounts = [];
     remoteStoreMap = {};
     resetAppForms();
@@ -2356,6 +2443,7 @@ function logoutCurrentAccount() {
   currentAccount = null;
   currentAdmin = null;
   state = buildEmptyState();
+  resetStoreViewState();
   resetAppForms();
   renderVisibility();
   setAuthMode("login");
@@ -2370,6 +2458,7 @@ function logoutAdmin() {
     currentAdmin = null;
     currentAccount = null;
     state = buildEmptyState();
+    resetStoreViewState();
     accounts = [];
     remoteStoreMap = {};
     renderVisibility();
@@ -2417,6 +2506,11 @@ function renderAll() {
     return;
   }
 
+  if (activeStoreViewAccountId !== currentAccount.id) {
+    activeStoreViewAccountId = currentAccount.id;
+    profitCalendarCursor = startOfMonthDate(new Date());
+  }
+
   document.title = `${currentAccount.storeName} | Tindahan Tracker`;
   renderAccountProfile();
   renderRecoveryBanner();
@@ -2433,14 +2527,21 @@ function renderAll() {
   renderWeeklySalesTrend();
   renderDebtPanel();
   renderExpensePanel();
+  renderPurchaseLog();
   renderFinanceInsights();
   renderReportInsights();
+  renderProfitCalendar();
   renderReceiptInsights();
   renderRecentActivity();
   updateSalePreview();
   updateRestockPreview();
   updateProductScanGuidance();
   updateScannerGuidance();
+}
+
+function resetStoreViewState() {
+  activeStoreViewAccountId = "";
+  profitCalendarCursor = startOfMonthDate(new Date());
 }
 
 function renderAdminDashboard() {
@@ -2467,6 +2568,49 @@ function renderAccountProfile() {
     : "Each store account is maintained separately on this browser.";
   elements.storeNameDisplay.textContent = currentAccount.storeName;
   elements.storeOwnerDisplay.textContent = `${currentAccount.ownerName} | ${currentAccount.email}`;
+  if (!cloudMode) {
+    setSyncStatus("local", "This account saves only on this browser.");
+  } else {
+    renderSyncStatus();
+  }
+}
+
+function setSyncStatus(mode, note = "") {
+  syncStatusState.mode = cloudMode ? mode : "local";
+  syncStatusState.note = note;
+  renderSyncStatus();
+}
+
+function renderSyncStatus() {
+  if (!elements.syncStatusCard || !elements.syncStatusPill || !elements.syncStatusNote) {
+    return;
+  }
+
+  const mode = cloudMode ? syncStatusState.mode : "local";
+  let label = "Browser Only";
+  let note = syncStatusState.note;
+
+  if (mode === "syncing") {
+    label = "Syncing";
+    note = note || "Updating the shared workspace for this account.";
+  } else if (mode === "issue") {
+    label = "Sync Issue";
+    note = note || lastCloudSaveErrorMessage || "The shared workspace could not be updated right now.";
+  } else if (mode === "synced") {
+    label = "Synced";
+    note =
+      note ||
+      (lastCloudSyncMarker
+        ? `Last shared sync: ${dateTimeFormatter.format(new Date(lastCloudSyncMarker))}.`
+        : "Shared sync is active for this account.");
+  } else {
+    note = note || "This account is saving only on this device.";
+  }
+
+  elements.syncStatusCard.dataset.syncState = mode;
+  elements.syncStatusPill.dataset.syncState = mode;
+  elements.syncStatusPill.textContent = label;
+  elements.syncStatusNote.textContent = note;
 }
 
 function renderRecoveryBanner() {
@@ -2614,7 +2758,14 @@ async function saveState(options = {}) {
 
   if (cloudMode) {
     remoteStoreMap[currentAccount.id] = normalized;
-    return persistCloudState(currentAccount.id, normalized, options);
+    setSyncStatus("syncing", "Saving changes to the shared workspace...");
+    const persisted = await persistCloudState(currentAccount.id, normalized, options);
+    if (!persisted) {
+      setSyncStatus("issue", lastCloudSaveErrorMessage);
+      return false;
+    }
+    setSyncStatus("synced");
+    return true;
   }
 
   const storeMap = loadStoreMap();
@@ -2844,7 +2995,8 @@ async function persistCloudState(userId, storeState, options = {}) {
     total: roundMoney(transaction.total),
     customer_name: `${transaction.customerName || ""}`.trim(),
     receipt_number: `${transaction.receiptNumber || ""}`.trim(),
-    note: `${transaction.note || ""}`.trim(),
+    supplier_name: transaction.type === "restock" ? normalizeSupplierName(transaction.supplierName) : "",
+    note: serializeTransactionNote(transaction),
     occurred_at: normalizeDate(transaction.occurredAt),
   }));
   const debtsPayload = normalizedState.debts.map((entry) => ({
@@ -3537,6 +3689,52 @@ function renderExpensePanel() {
     .join("");
 }
 
+function renderPurchaseLog() {
+  const purchases = getRestockTransactions();
+  const monthPurchases = purchases.filter((transaction) => isThisMonth(transaction.occurredAt));
+  const monthSuppliers = [...new Set(monthPurchases.map((transaction) => transaction.supplierName).filter(Boolean))];
+  const latestNamedSupplier = purchases.find((transaction) => transaction.supplierName);
+
+  elements.purchaseMonthTotal.textContent = currencyFormatter.format(sum(monthPurchases.map((transaction) => transaction.costTotal)));
+  elements.purchaseSupplierCount.textContent = `${monthSuppliers.length} supplier${monthSuppliers.length === 1 ? "" : "s"}`;
+  elements.purchaseLastSupplier.textContent = latestNamedSupplier
+    ? latestNamedSupplier.supplierName
+    : purchases.length
+      ? "Supplier not recorded"
+      : "No purchases yet";
+
+  if (!purchases.length) {
+    elements.purchaseLogList.innerHTML = `
+      <div class="empty-state">
+        Supplier purchase entries will appear here once you start recording restocks.
+      </div>
+    `;
+    return;
+  }
+
+  elements.purchaseLogList.innerHTML = purchases
+    .map(
+      (transaction) => `
+        <article class="list-card">
+          <strong>${escapeHtml(transaction.productName)}</strong>
+          <div class="list-meta">
+            <span>${escapeHtml(transaction.supplierName || "Supplier not recorded")}</span>
+            <span>${dateTimeFormatter.format(new Date(transaction.occurredAt))}</span>
+          </div>
+          <div class="list-meta">
+            <span>${formatQuantity(transaction.quantity)} ${escapeHtml(transaction.unit)}</span>
+            <span>Capital: ${currencyFormatter.format(transaction.costTotal)}</span>
+          </div>
+          <div class="list-meta">
+            <span>Added retail value: ${currencyFormatter.format(transaction.total)}</span>
+            <span>${escapeHtml(transaction.note || "No note recorded")}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function renderFinanceInsights() {
   const todaySummary = getFinancialSummary(isToday);
   const monthSummary = getFinancialSummary(isThisMonth);
@@ -3633,6 +3831,75 @@ function renderReportInsights() {
     emptyMessage: "Monthly sales movement will appear here once this month has recorded sales.",
     valueLabel: "Sales",
   });
+}
+
+function renderProfitCalendar() {
+  const viewMonth = startOfMonthDate(profitCalendarCursor);
+  const dailyFinanceMap = getDailyFinanceMap();
+  const year = viewMonth.getFullYear();
+  const month = viewMonth.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const monthEntries = [];
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const currentDate = new Date(year, month, day);
+    const dayKey = getLocalDateKey(currentDate);
+    const summary = dailyFinanceMap.get(dayKey) || {
+      sales: 0,
+      expenses: 0,
+      grossProfit: 0,
+      profit: 0,
+      unitsSold: 0,
+      saleCount: 0,
+      expenseCount: 0,
+    };
+
+    monthEntries.push({
+      ...summary,
+      date: currentDate,
+      dayKey,
+    });
+  }
+
+  const monthProfit = sum(monthEntries.map((entry) => entry.profit));
+  const losingDays = monthEntries.filter((entry) => entry.profit < 0).length;
+  const bestDay = [...monthEntries]
+    .filter((entry) => entry.saleCount || entry.expenseCount)
+    .sort((left, right) => right.profit - left.profit || right.sales - left.sales)[0];
+
+  elements.profitCalendarLabel.textContent = monthYearFormatter.format(viewMonth);
+  elements.calendarMonthProfit.textContent = formatSignedCurrency(monthProfit);
+  elements.calendarBestDay.textContent = bestDay
+    ? `${monthDayFormatter.format(bestDay.date)} | ${formatSignedCurrency(bestDay.profit)}`
+    : "No activity yet";
+  elements.calendarLossDays.textContent = `${losingDays} day${losingDays === 1 ? "" : "s"}`;
+
+  elements.profitCalendarGrid.innerHTML = [
+    ...CALENDAR_WEEKDAY_LABELS.map(
+      (label) => `
+        <div class="calendar-weekday">${label}</div>
+      `
+    ),
+    ...Array.from({ length: firstWeekday }, () => '<div class="calendar-cell empty" aria-hidden="true"></div>'),
+    ...monthEntries.map((entry) => {
+      const isCurrentDay = isSameCalendarDate(entry.date, new Date());
+      const toneClass =
+        entry.profit > 0 ? "profit" : entry.profit < 0 ? "loss" : entry.saleCount || entry.expenseCount ? "flat" : "quiet";
+
+      return `
+        <article class="calendar-cell ${toneClass}${isCurrentDay ? " today" : ""}">
+          <span class="calendar-date">${entry.date.getDate()}</span>
+          <strong class="calendar-profit">${formatCalendarPnl(entry.profit)}</strong>
+          <span class="calendar-meta">${
+            entry.saleCount || entry.expenseCount
+              ? `${entry.saleCount} sale${entry.saleCount === 1 ? "" : "s"}`
+              : "No activity"
+          }</span>
+        </article>
+      `;
+    }),
+  ].join("");
 }
 
 function renderProfitLeaders() {
@@ -4049,6 +4316,8 @@ async function recordRestock(product, quantity, note, options = {}) {
   product.updatedAt = new Date().toISOString();
   const unitCost = resolveCostPrice(product.costPrice, product.price);
   const costTotal = roundMoney(quantity * unitCost);
+  const supplierName = normalizeSupplierName(options.supplierName);
+  const purchaseDetails = parseRestockMetadata(note, supplierName);
 
   state.transactions.unshift({
     id: uid("txn"),
@@ -4064,18 +4333,26 @@ async function recordRestock(product, quantity, note, options = {}) {
     total: roundMoney(quantity * product.price),
     customerName: "",
     receiptNumber: "",
-    note,
+    supplierName: purchaseDetails.supplierName,
+    note: purchaseDetails.note,
     occurredAt: new Date().toISOString(),
   });
 
   addActivity(
     "restock",
-    options.activityMessage || `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}.`,
+    options.activityMessage ||
+      `Restocked ${formatQuantity(quantity)} ${product.unit} of ${product.name}${
+        purchaseDetails.supplierName ? ` from ${purchaseDetails.supplierName}` : ""
+      }.`,
     product
   );
-  const saved = await saveAndRefresh(options.feedbackMessage || `${product.name} restock saved.`, "success", {
-    scope: "inventory-transaction",
-  });
+  const saved = await saveAndRefresh(
+    options.feedbackMessage || `${product.name} restock${purchaseDetails.supplierName ? ` from ${purchaseDetails.supplierName}` : ""} saved.`,
+    "success",
+    {
+      scope: "inventory-transaction",
+    }
+  );
   if (!saved) {
     return { ok: false, message: "The restock could not be synchronized to the shared workspace." };
   }
@@ -4107,6 +4384,7 @@ async function handleRestockSubmit(event) {
 
   const product = getProductById(elements.restockProduct.value);
   const quantity = roundNumber(elements.restockQuantity.value);
+  const supplierName = normalizeSupplierName(elements.restockSupplier.value);
   const note = elements.restockNote.value.trim();
 
   if (!product) {
@@ -4119,7 +4397,7 @@ async function handleRestockSubmit(event) {
     return;
   }
 
-  const result = await recordRestock(product, quantity, note);
+  const result = await recordRestock(product, quantity, note, { supplierName });
   if (!result.ok) {
     setFeedback(result.message, "danger");
     return;
@@ -4362,6 +4640,7 @@ function updateSalePreview() {
 function updateRestockPreview() {
   const product = getProductById(elements.restockProduct.value);
   const quantity = roundNumber(elements.restockQuantity.value);
+  const supplierName = normalizeSupplierName(elements.restockSupplier.value);
 
   if (!product) {
     elements.restockPreview.textContent = "Choose a product to preview the new stock level.";
@@ -4377,7 +4656,9 @@ function updateRestockPreview() {
   const addedRetail = roundMoney(quantity * product.price);
   elements.restockPreview.textContent = `New stock after restock: ${formatQuantity(product.stock + quantity)} ${
     product.unit
-  }. Added capital: ${currencyFormatter.format(addedCost)}. Added retail value: ${currencyFormatter.format(addedRetail)}.`;
+  }. Added capital: ${currencyFormatter.format(addedCost)}. Added retail value: ${currencyFormatter.format(addedRetail)}.${
+    supplierName ? ` Supplier: ${supplierName}.` : ""
+  }`;
 }
 
 async function handleScannerManualSubmit(event) {
@@ -5031,6 +5312,12 @@ function getSaleTransactions() {
     .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
 }
 
+function getRestockTransactions() {
+  return [...state.transactions]
+    .filter((transaction) => transaction.type === "restock")
+    .sort((left, right) => new Date(right.occurredAt) - new Date(left.occurredAt));
+}
+
 function getProductPerformanceSummaries() {
   const summaries = new Map();
 
@@ -5375,6 +5662,95 @@ function getAdminRiskStatus(summary) {
     className: "admin-good",
     label: "Healthy",
   };
+}
+
+function shiftProfitCalendarMonth(offset) {
+  profitCalendarCursor = startOfMonthDate(new Date(profitCalendarCursor.getFullYear(), profitCalendarCursor.getMonth() + offset, 1));
+  renderProfitCalendar();
+}
+
+function getDailyFinanceMap() {
+  const summaryMap = new Map();
+
+  state.transactions
+    .filter((transaction) => transaction.type === "sale")
+    .forEach((transaction) => {
+      const key = getLocalDateKey(transaction.occurredAt);
+      const current = summaryMap.get(key) || {
+        sales: 0,
+        expenses: 0,
+        grossProfit: 0,
+        profit: 0,
+        unitsSold: 0,
+        saleCount: 0,
+        expenseCount: 0,
+      };
+
+      current.sales += transaction.total;
+      current.grossProfit += transaction.profitAmount ?? 0;
+      current.unitsSold += transaction.quantity;
+      current.saleCount += 1;
+      summaryMap.set(key, current);
+    });
+
+  state.expenses.forEach((expense) => {
+    const key = getLocalDateKey(expense.occurredAt);
+    const current = summaryMap.get(key) || {
+      sales: 0,
+      expenses: 0,
+      grossProfit: 0,
+      profit: 0,
+      unitsSold: 0,
+      saleCount: 0,
+      expenseCount: 0,
+    };
+
+    current.expenses += expense.amount;
+    current.expenseCount += 1;
+    summaryMap.set(key, current);
+  });
+
+  summaryMap.forEach((entry) => {
+    entry.sales = roundMoney(entry.sales);
+    entry.expenses = roundMoney(entry.expenses);
+    entry.grossProfit = roundMoney(entry.grossProfit);
+    entry.profit = roundMoney(entry.grossProfit - entry.expenses);
+    entry.unitsSold = roundNumber(entry.unitsSold);
+  });
+
+  return summaryMap;
+}
+
+function getLocalDateKey(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isSameCalendarDate(left, right) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function startOfMonthDate(value) {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  date.setDate(1);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function formatCalendarPnl(value) {
+  const rounded = roundMoney(value);
+  if (rounded === 0) {
+    return "P0";
+  }
+
+  return `${rounded > 0 ? "+" : "-"}P${numberFormatter.format(Math.abs(rounded))}`;
 }
 
 function isToday(isoDate) {

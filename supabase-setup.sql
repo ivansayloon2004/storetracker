@@ -58,6 +58,7 @@ create table if not exists public.transactions (
   total numeric(12, 2) not null,
   customer_name text not null default '',
   receipt_number text not null default '',
+  supplier_name text not null default '',
   note text not null default '',
   occurred_at timestamptz not null default timezone('utc', now())
 );
@@ -131,6 +132,9 @@ alter table public.transactions
 alter table public.transactions
   add column if not exists receipt_number text;
 
+alter table public.transactions
+  add column if not exists supplier_name text;
+
 update public.transactions
 set
   unit_cost = coalesce(unit_cost, unit_price),
@@ -143,6 +147,7 @@ set
     end
   ),
   customer_name = coalesce(customer_name, ''),
+  supplier_name = coalesce(supplier_name, ''),
   receipt_number = coalesce(
     receipt_number,
     case
@@ -154,6 +159,7 @@ where unit_cost is null
    or cost_total is null
    or profit_amount is null
    or customer_name is null
+   or supplier_name is null
    or receipt_number is null;
 
 alter table public.transactions
@@ -179,6 +185,12 @@ alter table public.transactions
 
 alter table public.transactions
   alter column customer_name set not null;
+
+alter table public.transactions
+  alter column supplier_name set default '';
+
+alter table public.transactions
+  alter column supplier_name set not null;
 
 alter table public.transactions
   alter column receipt_number set default '';
