@@ -4,6 +4,7 @@ const SESSION_KEY = "tindahan-tracker-session-v1";
 const STORE_DATA_KEY = "tindahan-tracker-store-data-v1";
 const ADMIN_KEY = "tindahan-tracker-admin-v1";
 const RECOVERY_KEY = "tindahan-tracker-recovery-v1";
+const SAFETY_BACKUP_KEY = "tindahan-tracker-safety-backups-v1";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -148,6 +149,11 @@ const elements = {
   syncStatusCard: document.querySelector("#sync-status-card"),
   syncStatusPill: document.querySelector("#sync-status-pill"),
   syncStatusNote: document.querySelector("#sync-status-note"),
+  backupStatusCard: document.querySelector("#backup-status-card"),
+  backupStatusPill: document.querySelector("#backup-status-pill"),
+  backupStatusSummary: document.querySelector("#backup-status-summary"),
+  backupStatusNote: document.querySelector("#backup-status-note"),
+  backupRestoreButton: document.querySelector("#backup-restore-button"),
   logoutButton: document.querySelector("#logout-button"),
   feedbackMessage: document.querySelector("#feedback-message"),
   recoveryBanner: document.querySelector("#recovery-banner"),
@@ -525,6 +531,9 @@ function setupEventListeners() {
   elements.importFile.addEventListener("change", importStateFromFile);
   elements.resetDemo.addEventListener("click", resetToDemoState);
   elements.logoutButton.addEventListener("click", logoutCurrentAccount);
+  elements.backupRestoreButton?.addEventListener("click", () => {
+    void handleBackupRestore();
+  });
   elements.recoveryAction?.addEventListener("click", () => {
     void handleRecoveryImport();
   });
@@ -827,6 +836,7 @@ async function syncCloudInterfaceForUser(user) {
     return;
   }
   setSyncStatus("synced");
+  saveSafetyBackupSnapshot(currentAccount, state, "cloud-load");
   remoteStoreMap[currentAccount.id] = normalizeState(state);
   resetAuthForms();
   renderVisibility();
@@ -952,6 +962,7 @@ async function refreshCloudAccountState(options = {}) {
     lastCloudSyncMarker = nextMarker;
     currentAccount = buildCloudAccount(profile);
     state = normalizeState(latestState);
+    saveSafetyBackupSnapshot(currentAccount, state, "cloud-refresh");
     remoteStoreMap[currentAccount.id] = state;
     setSyncStatus("synced");
     renderVisibility();
@@ -1260,6 +1271,102 @@ function saveRecoveryRegistry(registry) {
   }
 }
 
+function loadSafetyBackups() {
+  const parsed = readBrowserStorageJson(SAFETY_BACKUP_KEY, []);
+  return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+}
+
+function saveSafetyBackups(backups) {
+  try {
+    localStorage.setItem(SAFETY_BACKUP_KEY, JSON.stringify(backups));
+  } catch (error) {
+    console.warn("Unable to save automatic safety backups.", error);
+  }
+}
+
+function buildSafetyBackupAccountKey(accountLike) {
+  return [
+    `${accountLike?.accountId || accountLike?.id || ""}`.trim(),
+    normalizeEmail(accountLike?.email),
+    normalizeLookupKey(accountLike?.storeName),
+  ].join("|");
+}
+
+function limitSafetyBackups(backups) {
+  const perAccountCounts = new Map();
+
+  return backups.filter((backup, index) => {
+    if (index >= 30) {
+      return false;
+    }
+
+    const accountKey = buildSafetyBackupAccountKey(backup);
+    const nextCount = (perAccountCounts.get(accountKey) || 0) + 1;
+    perAccountCounts.set(accountKey, nextCount);
+    return nextCount <= 6;
+  });
+}
+
+function buildSafetyBackupSignature(account, storeState) {
+  const summary = summarizeStoreState(storeState);
+  return `${buildSafetyBackupAccountKey(account)}:${latestStateTimestamp(storeState)}:${summary.products}:${summary.transactions}:${summary.debts}:${summary.expenses}`;
+}
+
+function saveSafetyBackupSnapshot(account, storeState, reason = "auto-save") {
+  if (!account || !hasRecoverableRecords(storeState)) {
+    return;
+  }
+
+  const normalizedState = normalizeState(storeState);
+  const summary = summarizeStoreState(normalizedState);
+  const nextBackup = {
+    id: uid("backup"),
+    accountId: `${account.id || ""}`.trim(),
+    email: normalizeEmail(account.email),
+    storeName: `${account.storeName || ""}`.trim(),
+    ownerName: `${account.ownerName || ""}`.trim(),
+    savedAt: new Date().toISOString(),
+    reason: `${reason || "auto-save"}`.trim() || "auto-save",
+    summary,
+    signature: buildSafetyBackupSignature(account, normalizedState),
+    state: normalizedState,
+  };
+
+  const backups = loadSafetyBackups();
+  const latestMatch = backups.find((backup) => buildSafetyBackupAccountKey(backup) === buildSafetyBackupAccountKey(nextBackup));
+  if (latestMatch?.signature === nextBackup.signature) {
+    return;
+  }
+
+  const deduped = backups.filter((backup) => backup.signature !== nextBackup.signature);
+  saveSafetyBackups(limitSafetyBackups([nextBackup, ...deduped]));
+}
+
+function getSafetyBackupsForCurrentAccount() {
+  if (!currentAccount) {
+    return [];
+  }
+
+  const currentAccountKey = buildSafetyBackupAccountKey(currentAccount);
+  const currentEmail = normalizeEmail(currentAccount.email);
+  const currentStoreKey = normalizeLookupKey(currentAccount.storeName);
+
+  return loadSafetyBackups()
+    .filter((backup) => {
+      const backupKey = buildSafetyBackupAccountKey(backup);
+      return (
+        backupKey === currentAccountKey ||
+        (currentEmail && normalizeEmail(backup.email) === currentEmail) ||
+        (currentStoreKey && normalizeLookupKey(backup.storeName) === currentStoreKey)
+      );
+    })
+    .sort((left, right) => new Date(right.savedAt || 0) - new Date(left.savedAt || 0));
+}
+
+function getLatestSafetyBackupForCurrentAccount() {
+  return getSafetyBackupsForCurrentAccount()[0] || null;
+}
+
 function getRecoveryCandidateForCurrentAccount() {
   if (!cloudMode || !currentAccount) {
     return null;
@@ -1334,6 +1441,23 @@ function getRecoveryCandidateForCurrentAccount() {
       score: (browserAccounts.length ? 6 : 28) + summary.totalRecords,
       updatedAt: latestStateTimestamp(legacyState),
     });
+  }
+
+  if (isMeaningfullyEmptyState(state)) {
+    const latestSafetyBackup = getLatestSafetyBackupForCurrentAccount();
+    if (latestSafetyBackup && hasRecoverableRecords(latestSafetyBackup.state)) {
+      recoveryCandidates.push({
+        kind: "automatic-backup",
+        sourceId: latestSafetyBackup.id,
+        label: "Automatic safety backup",
+        accountEmail: latestSafetyBackup.email,
+        state: latestSafetyBackup.state,
+        summary: latestSafetyBackup.summary,
+        signature: latestSafetyBackup.signature,
+        score: 220 + latestSafetyBackup.summary.totalRecords,
+        updatedAt: latestSafetyBackup.savedAt,
+      });
+    }
   }
 
   const bestCandidate = recoveryCandidates
@@ -2513,6 +2637,7 @@ function renderAll() {
 
   document.title = `${currentAccount.storeName} | Tindahan Tracker`;
   renderAccountProfile();
+  renderBackupStatus();
   renderRecoveryBanner();
   elements.todayLabel.textContent = `Today is ${dayFormatter.format(new Date())}`;
   populateDebtCustomerSuggestions();
@@ -2613,6 +2738,39 @@ function renderSyncStatus() {
   elements.syncStatusNote.textContent = note;
 }
 
+function renderBackupStatus() {
+  if (
+    !elements.backupStatusCard ||
+    !elements.backupStatusPill ||
+    !elements.backupStatusSummary ||
+    !elements.backupStatusNote ||
+    !elements.backupRestoreButton
+  ) {
+    return;
+  }
+
+  const backups = getSafetyBackupsForCurrentAccount();
+  const latestBackup = backups[0];
+  const hasBackup = Boolean(latestBackup);
+
+  elements.backupStatusCard.dataset.backupState = hasBackup ? "ready" : "empty";
+  elements.backupStatusPill.dataset.syncState = hasBackup ? "synced" : "local";
+  elements.backupStatusPill.textContent = hasBackup ? "Protected" : "Waiting";
+  elements.backupRestoreButton.disabled = !hasBackup;
+
+  if (!hasBackup) {
+    elements.backupStatusSummary.textContent = "No automatic backup yet";
+    elements.backupStatusNote.textContent =
+      "Safety backups will be stored on this browser whenever your store data changes.";
+    return;
+  }
+
+  elements.backupStatusSummary.textContent = `Latest backup: ${dateTimeFormatter.format(new Date(latestBackup.savedAt))}`;
+  elements.backupStatusNote.textContent = `${backups.length} automatic backup${
+    backups.length === 1 ? "" : "s"
+  } saved on this browser. Latest snapshot contains ${formatRecoverySummary(latestBackup.summary).toLowerCase()}.`;
+}
+
 function renderRecoveryBanner() {
   if (!elements.recoveryBanner || !elements.recoveryBannerText) {
     return;
@@ -2689,6 +2847,68 @@ async function handleRecoveryImport() {
   );
 }
 
+async function handleBackupRestore() {
+  if (!currentAccount) {
+    return;
+  }
+
+  const latestBackup = getLatestSafetyBackupForCurrentAccount();
+  if (!latestBackup) {
+    setFeedback("No automatic backup is available on this browser yet.", "warning");
+    return;
+  }
+
+  const candidate = {
+    kind: "automatic-backup",
+    sourceId: latestBackup.id,
+    label: "Automatic safety backup",
+    accountEmail: latestBackup.email,
+    state: latestBackup.state,
+    summary: latestBackup.summary,
+    signature: latestBackup.signature,
+    updatedAt: latestBackup.savedAt,
+  };
+  const currentState = normalizeState(state);
+  const replaceMode = isMeaningfullyEmptyState(currentState);
+  const shouldContinue = window.confirm(
+    `Restore ${formatRecoverySummary(candidate.summary)} from the automatic backup saved on ${dateTimeFormatter.format(
+      new Date(latestBackup.savedAt)
+    )}? ` +
+      (replaceMode
+        ? "This will restore the latest browser safety snapshot into the current workspace."
+        : "This will merge the latest browser safety snapshot with the current workspace.")
+  );
+
+  if (!shouldContinue) {
+    return;
+  }
+
+  const previousState = normalizeState(state);
+  const nextState = buildRecoveredStoreState(previousState, candidate);
+
+  setBusyState(true, replaceMode ? "Restoring automatic backup..." : "Merging automatic backup...");
+  state = nextState;
+  const saved = await saveState({ backupReason: "backup-restore" });
+  setBusyState(false);
+
+  if (!saved) {
+    state = previousState;
+    renderAll();
+    setFeedback(
+      cloudMode
+        ? lastCloudSaveErrorMessage || "The automatic backup could not be synchronized to the shared workspace."
+        : "The automatic backup could not be restored right now.",
+      "danger"
+    );
+    return;
+  }
+
+  remoteStoreMap[currentAccount.id] = normalizeState(nextState);
+  markRecoveryImported(currentAccount, candidate);
+  renderAll();
+  setFeedback(`Restored ${formatRecoverySummary(candidate.summary).toLowerCase()} from the latest automatic backup.`, "success");
+}
+
 function buildRecoveredStoreState(currentState, candidate) {
   const importedState = normalizeState(candidate.state);
   const recoveryActivity = buildRecoveryActivityEntry(candidate);
@@ -2755,6 +2975,7 @@ async function saveState(options = {}) {
   }
 
   const normalized = normalizeState(state);
+  saveSafetyBackupSnapshot(currentAccount, normalized, options.backupReason || options.scope || "save");
 
   if (cloudMode) {
     remoteStoreMap[currentAccount.id] = normalized;

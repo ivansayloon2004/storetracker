@@ -264,6 +264,18 @@
           <p id="sync-status-note">This account is saving only on this device.</p>
         </div>
 
+        <div class="account-card backup-card" id="backup-status-card">
+          <div class="account-card-head">
+            <p class="eyebrow">Automatic Backup</p>
+            <span class="session-status" id="backup-status-pill" data-sync-state="local">Waiting</span>
+          </div>
+          <strong id="backup-status-summary">No automatic backup yet</strong>
+          <p id="backup-status-note">Safety backups will be stored on this browser whenever your store data changes.</p>
+          <div class="mini-actions backup-actions">
+            <button class="button soft" id="backup-restore-button" type="button" disabled>Restore Latest Backup</button>
+          </div>
+        </div>
+
         <p class="feedback-message" id="feedback-message">The inventory workspace is ready.</p>
 
         <div class="install-panel compact" data-install-panel hidden>

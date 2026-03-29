@@ -694,6 +694,19 @@ button {
   gap: 0.45rem;
 }
 
+.backup-card {
+  gap: 0.45rem;
+}
+
+.backup-card strong {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.backup-actions .button {
+  width: auto;
+}
+
 .sync-card[data-sync-state="syncing"] {
   border-color: rgba(32, 79, 134, 0.2);
   background: rgba(236, 243, 251, 0.92);
