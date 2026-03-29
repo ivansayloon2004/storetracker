@@ -251,6 +251,9 @@ const elements = {
   reportMonthlyUnits: document.querySelector("#report-monthly-units"),
   reportWeeklyTrend: document.querySelector("#report-weekly-trend"),
   reportMonthlyTrend: document.querySelector("#report-monthly-trend"),
+  salesHistoryTotal: document.querySelector("#sales-history-total"),
+  salesHistoryCount: document.querySelector("#sales-history-count"),
+  salesHistoryLatestDate: document.querySelector("#sales-history-latest-date"),
   receiptList: document.querySelector("#receipt-list"),
   recentActivity: document.querySelector("#recent-activity"),
   exportData: document.querySelector("#export-data"),
@@ -3671,6 +3674,13 @@ function renderWeeklySalesTrend() {
 function renderReceiptInsights() {
   const sales = getSaleTransactions();
   const latestSale = sales[0];
+  const totalSalesAmount = sum(sales.map((transaction) => transaction.total));
+
+  elements.salesHistoryTotal.textContent = currencyFormatter.format(totalSalesAmount);
+  elements.salesHistoryCount.textContent = `${sales.length} sale${sales.length === 1 ? "" : "s"}`;
+  elements.salesHistoryLatestDate.textContent = latestSale
+    ? dateTimeFormatter.format(new Date(latestSale.occurredAt))
+    : "No sales yet";
 
   if (!latestSale) {
     elements.saleLatestReceiptNumber.textContent = "No sale receipt yet";
@@ -3680,7 +3690,7 @@ function renderReceiptInsights() {
     elements.salePrintLatest.disabled = true;
     elements.receiptList.innerHTML = `
       <div class="empty-state">
-        Receipts will appear here as soon as you start recording sales.
+        Your full sales history will appear here as soon as you start recording sales.
       </div>
     `;
     return;
@@ -3693,7 +3703,6 @@ function renderReceiptInsights() {
   elements.salePrintLatest.disabled = false;
 
   elements.receiptList.innerHTML = sales
-    .slice(0, 10)
     .map(
       (transaction) => `
         <article class="list-card receipt-card">

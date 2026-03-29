@@ -765,7 +765,7 @@
               Reports
             </button>
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-receipts">
-              Receipts
+              Sales History
             </button>
             <button class="segment-button" type="button" role="tab" aria-selected="false" data-tab-group="store-insights" data-tab-target="insight-activity">
               Activity
@@ -913,7 +913,21 @@
           </div>
 
           <div class="tab-panel" id="insight-receipts" data-tab-panel="store-insights" hidden>
-            <p class="section-intro">Open a printable summary for each recorded sale without leaving the dashboard.</p>
+            <p class="section-intro">Review every recorded sale, including previous receipts, without leaving the dashboard.</p>
+            <div class="summary-chip-grid compact-summary-grid">
+              <article class="summary-chip">
+                <span>Total sales</span>
+                <strong id="sales-history-total">PHP 0.00</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Recorded sales</span>
+                <strong id="sales-history-count">0 sales</strong>
+              </article>
+              <article class="summary-chip">
+                <span>Latest sale</span>
+                <strong id="sales-history-latest-date">No sales yet</strong>
+              </article>
+            </div>
             <div class="list-stack scroll-list" id="receipt-list"></div>
           </div>
 
