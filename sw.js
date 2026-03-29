@@ -1,10 +1,10 @@
-const CACHE_NAME = "tindahan-tracker-shell-20260329k";
+const CACHE_NAME = "tindahan-tracker-shell-20260329l";
 const APP_SHELL_ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=20260329k",
-  "/script.js?v=20260329k",
-  "/manifest.webmanifest?v=20260329k",
+  "/styles.css?v=20260329l",
+  "/script.js?v=20260329l",
+  "/manifest.webmanifest?v=20260329l",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/apple-touch-icon.png",
